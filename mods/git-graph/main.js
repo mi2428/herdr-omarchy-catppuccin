@@ -1,10 +1,10 @@
-import { View, div, PathBuilder } from "gpui-kit";
+import { View, div, svg, PathBuilder } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list } from "gpui-base";
 import { spaces, panes, focused, exec, theme } from "herdr";
 import { parseHistory, graphRows } from "./history.js";
 
 const ROW = 22, STEP = 14, COLORS = ["ansi4", "ansi5", "ansi2", "ansi3", "ansi6", "ansi1"];
-const rowHeight = row => row.refs.length ? 26 : ROW;
+const rowHeight = row => row.refs.length ? 36 : ROW;
 const pad = n => String(n).padStart(2, "0");
 const date = seconds => {
   const d = new Date(seconds * 1000);
@@ -82,7 +82,9 @@ export default class GitGraph extends View {
       .child(h_flex().h(42).flex_none().px(14).items_center()
         .child(div().font_semibold().text_color(t.foreground).child("Git Graph"))
         .child(div().flex_1())
-        .child(div().id("graph-refresh").cursor_pointer().text_color(t.muted).on_click((_e, cx) => this.refresh(cx)).child("↻")))
+        .child(div().id("graph-refresh").size(26).flex_none().flex().items_center().justify_center()
+          .cursor_pointer().text_color(t.dim).hover(s => s.text_color(t.foreground))
+          .on_click((_e, cx) => this.refresh(cx)).child(svg("mods/git-graph/refresh.svg").size(14))))
       .child(v_flex().flex_1().min_h(0)
         .when(Boolean(this.error) || (!this.rows.length && !this.loading), el => el.child(div().p(10).text_color(t.dim).child(this.error || "No commits")))
         .when(!this.rows.length && this.loading, el => el.child(div().p(10).text_color(t.dim).child("Loading history…")))
