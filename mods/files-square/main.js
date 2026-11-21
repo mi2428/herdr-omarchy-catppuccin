@@ -11,6 +11,24 @@ function location() {
 }
 const key = () => JSON.stringify(location());
 const LANG = { ts: "js", tsx: "js", mts: "js", cts: "js", jsx: "js", mjs: "js", toml: "yaml", jsonc: "json", svelte: "html", vue: "html" };
+const FILE_ICONS = Object.assign(Object.create(null), {
+  ".env": ["", "ansi3"], ".gitignore": ["", "ansi1"], ".editorconfig": ["", "ansi7"],
+  "readme.md": ["󰂺", "ansi4"], "license": ["", "ansi3"], "dockerfile": ["󰡨", "ansi4"],
+  "package.json": ["", "ansi1"], "makefile": ["", "ansi2"],
+  md: ["", "ansi4"], txt: ["󰈙", "muted"], pdf: ["", "ansi1"],
+  js: ["", "ansi3"], mjs: ["", "ansi3"], cjs: ["", "ansi3"], jsx: ["", "ansi3"],
+  ts: ["", "ansi4"], mts: ["", "ansi4"], cts: ["", "ansi4"], tsx: ["", "ansi4"],
+  json: ["", "ansi3"], jsonc: ["", "ansi3"], yaml: ["", "ansi5"], yml: ["", "ansi5"], toml: ["", "ansi6"],
+  html: ["", "ansi1"], css: ["", "ansi4"], scss: ["", "ansi5"], vue: ["󰡄", "ansi2"], svelte: ["", "ansi1"],
+  py: ["", "ansi3"], lua: ["", "ansi4"], nix: ["", "ansi4"], sh: ["", "ansi2"], bash: ["", "ansi2"], fish: ["", "ansi2"],
+  rs: ["", "ansi1"], go: ["", "ansi6"], c: ["", "ansi4"], h: ["", "ansi5"], cpp: ["", "ansi5"], sql: ["", "ansi6"],
+  svg: ["󰜡", "ansi3"], png: ["", "ansi5"], jpg: ["", "ansi5"], jpeg: ["", "ansi5"], webp: ["", "ansi5"], gif: ["", "ansi5"],
+  zip: ["", "ansi3"], gz: ["", "ansi3"], tar: ["", "ansi3"], lock: ["", "muted"],
+});
+const fileIcon = (name) => {
+  const lower = name.toLowerCase();
+  return FILE_ICONS[lower] ?? FILE_ICONS[lower.slice(lower.lastIndexOf(".") + 1)] ?? ["󰈙", "muted"];
+};
 const PER_FOLDER = 500, TOTAL = 5000;
 
 async function directory(path, on) {
@@ -152,10 +170,11 @@ export default class Files extends View {
     for (const entry of this.entries.get(prefix) ?? []) {
       if (out.length >= TOTAL) break;
       const path = prefix ? `${prefix}/${entry.name}` : entry.name, open = this.folders.has(path), mark = this.marks[`${this.root}/${path}`];
+      const [glyph, color] = entry.dir ? [open ? "" : "", "ansi4"] : fileIcon(entry.name);
       out.push(h_flex().id(`file-${path}`).h(28).flex_none().pl(8 + depth * 18).pr(8).gap(7).items_center().cursor_pointer().hover(s => s.bg(t.hover))
         .on_click((_e, cx) => entry.dir ? this.toggle(path, cx) : this.show(path, cx))
         .child(entry.dir ? svg(`mods/files/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
-        .child(svg(`mods/${entry.dir ? "files/folder" : "workspace-chrome/file-text"}.svg`).size(14).flex_none().text_color(entry.dir ? t.ansi3 : t.ansi4))
+        .child(div().w(14).flex_none().font_family("JetBrainsMono Nerd Font").text_size(15).text_color(t[color]).child(glyph))
         .child(div().flex_1().min_w(0).truncate().child(entry.name))
         .when(Boolean(mark), el => el.child(div().text_size(11).text_color(mark === "A" ? t.ansi2 : mark === "D" || mark === "U" ? t.ansi1 : t.blocked).child(mark))));
       if (entry.dir && open) this.rows(path, depth + 1, out, t);
