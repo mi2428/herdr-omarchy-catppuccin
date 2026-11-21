@@ -1,6 +1,6 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex, ScrollHandle } from "gpui-base";
-import { spaces, panes, run, openOverlay, theme, window, layout, settings } from "herdr";
+import { spaces, panes, focused, terminals, exec, run, openOverlay, closeOverlay, notify, props, theme, window, layout, settings } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -28,12 +28,55 @@ function label(tab, lead) {
 }
 
 export default class Tabs extends View {
-  init() {
+  init(config, cx) {
+    this.lazygit = config?.terminal ?? props()?.terminal;
+    if (this.lazygit) {
+      const overlay = config?.overlay ?? props()?.overlay;
+      cx.timer.every(1000, () => {
+        if (!terminals().some(t => t.address === this.lazygit && t.state === "live")) closeOverlay(overlay);
+      });
+      return;
+    }
     this.pressed = null;
     this.scroll = ScrollHandle.new();
     try { this.panels = JSON.parse(localStorage.getItem("panels") ?? "{}"); } catch { this.panels = {}; }
     if (!this.panels || typeof this.panels !== "object" || Array.isArray(this.panels)) this.panels = {};
     this.swipe = { acc: 0, steps: 0, at: 0, last: 0 };
+  }
+
+  close() {
+    if (this.lazygit && terminals().some(t => t.address === this.lazygit && t.state === "live")) run("terminal.kill", { terminal: this.lazygit });
+  }
+
+  openLazygit(cx) {
+    if (this.opening) return;
+    const space = spaces().find(s => s.active), f = focused();
+    const pane = f?.pane ? panes().find(p => p.pane === f.pane) : null;
+    const cwd = pane?.cwd || f?.cwd || space?.folder;
+    const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
+    if (!cwd) { notify({ title: "Cannot open Lazygit", body: "No folder selected", level: "error" }); return; }
+    this.opening = true;
+    cx.spawn(async () => {
+      try {
+        const args = ["run", "--json", "--bg", "--rm", "--cwd", cwd];
+        if (on) args.push("--on", on);
+        args.push("--", "lazygit");
+        const result = await exec("hc", args);
+        if (result.code !== 0) throw new Error(result.stderr || "Cannot start Lazygit");
+        const terminal = JSON.parse(result.stdout).address;
+        if (!terminal) throw new Error("No terminal address returned");
+        try {
+          openOverlay({ kind: "dialog", frame: "none", width: 0.8, height: 0.8, layout: { type: "column", background: "#1e1e2eeb", radius: 0, children: [
+            { type: "block", size: { px: 0 }, content: { mod: "tabs-files", props: { terminal } } },
+            { type: "block", content: { terminal } },
+          ] } });
+        } catch (e) {
+          await exec("hc", ["kill", terminal]);
+          throw e;
+        }
+      } catch (e) { notify({ title: "Cannot open Lazygit", body: String(e), level: "error" }); }
+      finally { this.opening = false; }
+    });
   }
 
   // One tab per wheel notch. A touchpad or smooth-scrolling mouse sends many
@@ -88,6 +131,7 @@ export default class Tabs extends View {
   }
 
   render() {
+    if (this.lazygit) return div();
     const t = theme();
     const space = spaces().find(p => p.active);
     const shown = space?.tabs ?? [];
@@ -131,15 +175,15 @@ export default class Tabs extends View {
     const panel = find(root, "panel"), body = find(root, "panel-body");
     const enabled = ["files"];
     this.syncPanel(space, panel, body, enabled);
-    const panelButton = (id, label, icon) => {
-      const on = panel && !panel.hidden && body?.active === id;
+    const panelButton = (id, label, icon, action) => {
+      const on = !action && panel && !panel.hidden && body?.active === id;
       return h_flex().id(`panel-${id}`).h(26).px(8).gap(5).flex_none().items_center()
         .text_size(12).bg(on ? t.selected : t.chrome).text_color(on ? t.foreground : t.muted)
         .hover(s => s.bg(t.hover)).on_mouse_down("left", stop)
-        .on_click(() => {
+        .on_click(action ?? (() => {
           if (on) run("layout.hide", { id: "panel" });
           else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: "panel" }); }
-        }).child(svg(icon).size(14)).child(label);
+        })).child(svg(icon).size(14)).child(label);
     };
     return h_flex().size_full().min_w(0).px(10).pl(lightsPadding).gap(3).items_center().bg(t.chrome)
       .on_mouse_up("left", () => { this.pressed = null; })
@@ -149,7 +193,7 @@ export default class Tabs extends View {
         .children(shown.map(item)))
       .child(button("tab-new", "+", () => openOverlay({ mod: "new-menu-square", frame: "none", kind: "popup", width: 250, height: 512 })))
       .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/files/file.svg")))
-      
+      .child(panelButton("changes", "Changes", "mods/changes/changes.svg", (_e, cx) => this.openLazygit(cx)))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))
         .child(button("maximize", w.platform === "windows" ? svg(`mods/tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", () => run("window.maximize")))
         .child(button("close-window", w.platform === "windows" ? svg("mods/tabs/win-close.svg").size(16) : svg("mods/pane/close.svg").size(13), () => run("window.close"))));
