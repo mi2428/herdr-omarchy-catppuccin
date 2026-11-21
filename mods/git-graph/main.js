@@ -3,7 +3,8 @@ import { h_flex, v_flex, v_virtual_list } from "gpui-base";
 import { spaces, panes, focused, exec, theme } from "herdr";
 import { parseHistory, graphRows } from "./history.js";
 
-const ROW = 28, STEP = 14, COLORS = ["ansi4", "ansi5", "ansi2", "ansi3", "ansi6", "ansi1"];
+const ROW = 22, STEP = 14, COLORS = ["ansi4", "ansi5", "ansi2", "ansi3", "ansi6", "ansi1"];
+const rowHeight = row => row.refs.length ? 26 : ROW;
 const pad = n => String(n).padStart(2, "0");
 const date = seconds => {
   const d = new Date(seconds * 1000);
@@ -47,25 +48,24 @@ export default class GitGraph extends View {
   }
 
   lines(row, t) {
-    const x = col => 9 + col * STEP, y = fraction => fraction * ROW;
-    return div().relative().w(Math.min(this.columns * STEP + 10, 150)).h(ROW).flex_none().overflow_hidden()
+    const height = rowHeight(row), x = col => 9 + col * STEP, y = fraction => fraction * height;
+    return div().relative().w(Math.min(this.columns * STEP + 10, 150)).h(height).flex_none().overflow_hidden()
       .children(row.links.map(([from, top, to, bottom, color]) => {
         let path = PathBuilder.stroke(1.6).move_to(x(from), y(top));
         path = from === to ? path.line_to(x(to), y(bottom))
           : path.cubic_bezier_to(x(to), y(bottom), x(from), y(top) + 9, x(to), y(bottom) - 9);
         return window.paint_path(path.build(), t[COLORS[color % COLORS.length]]).absolute().inset_0().size_full();
       }))
-      .child(div().absolute().left(x(row.col) - 4).top(ROW / 2 - 4).size(8).rounded_full()
+      .child(div().absolute().left(x(row.col) - 4).top(height / 2 - 4).size(8).rounded_full()
         .bg(t[COLORS[row.col % COLORS.length]]));
   }
 
   row(row, t) {
     const labels = row.refs.slice(0, 2);
-    return h_flex().h(ROW).flex_none().px(7).gap(4).items_center()
-      .when(row.refs.some(ref => ref.kind === "head"), el => el.bg(t.selected))
+    return h_flex().h(rowHeight(row)).w_full().min_w(0).flex_none().px(7).gap(4).items_center()
       .child(this.lines(row, t))
-      .child(v_flex().flex_1().min_w(0).gap(0)
-        .child(div().truncate().text_color(t.foreground).child(row.title || "(no message)"))
+      .child(v_flex().flex_1().min_w(0).overflow_hidden().gap(0)
+        .child(div().truncate().tooltip(row.title).text_color(t.foreground).child(row.title || "(no message)"))
         .when(Boolean(row.refs.length), el => el.child(h_flex().gap(3).min_w(0)
           .children(labels.map(ref => div().max_w(96).truncate().px(4).text_size(10)
             .bg(ref.kind === "tag" ? t.ansi3 + "30" : ref.kind === "remote" ? t.ansi6 + "30" : t.ansi4 + "30")
@@ -86,7 +86,8 @@ export default class GitGraph extends View {
       .child(v_flex().flex_1().min_h(0)
         .when(Boolean(this.error) || (!this.rows.length && !this.loading), el => el.child(div().p(10).text_color(t.dim).child(this.error || "No commits")))
         .when(!this.rows.length && this.loading, el => el.child(div().p(10).text_color(t.dim).child("Loading history…")))
-        .when(Boolean(this.rows.length), el => el.child(v_virtual_list("git-graph-commits", this.rows.length + Number(Boolean(this.more)), ROW,
+        .when(Boolean(this.rows.length), el => el.child(v_virtual_list("git-graph-commits", this.rows.length + Number(Boolean(this.more)),
+          this.rows.map(rowHeight).concat(this.more ? [32] : []),
           i => this.rows[i]?.hash ?? "more", (range, cx) => Array.from({ length: range.end - range.start }, (_, offset) => {
             const i = range.start + offset;
             return this.rows[i] ? this.row(this.rows[i], t) : div().id("graph-more").p(10).text_color(t.ansi4).cursor_pointer()

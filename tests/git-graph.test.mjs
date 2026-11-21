@@ -32,9 +32,9 @@ assert.equal(panel.type, "column");
 assert.equal(panel.gap, find(layout, "sidebar-lists").gap);
 assert.deepEqual(panel.children.map(child => [child.id, child.size.weight]), [["files", 1], ["git", 1]]);
 const mocha = JSON.parse(readFileSync(new URL("../themes/catppuccin-mocha.json", import.meta.url), "utf8"));
-for (const child of panel.children) assert.equal(child.background, mocha.background);
-assert.match(find(layout, "panel").background, /^#[0-9a-f]{6}$/i);
-assert.notEqual(find(layout, "panel").background, mocha.background);
+for (const child of panel.children) assert.equal(child.background, "chrome");
+assert.equal(find(layout, "panel").background, find(layout, "sidebar").background);
+assert.equal(mocha.colors.canvas, "#00000000");
 
 const tabsSource = readFileSync(new URL("../mods/tabs-files/main.js", import.meta.url), "utf8")
   .replace(/^import .*$/gm, "").replace("export default class Tabs", "class Tabs");
