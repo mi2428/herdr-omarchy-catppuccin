@@ -20,7 +20,7 @@
       },
       "min": 44,
       "max": 480,
-      "background": "chrome",
+      "background": "canvas",
       "resizable": false,
       "children": [
         {
@@ -32,6 +32,10 @@
           "window_drag": true,
           "content": {
             "mod": "workspace-chrome-square"
+          },
+          "border": {
+            "width": 0,
+            "color": "border"
           }
         },
         {
@@ -47,6 +51,10 @@
               "min": 90,
               "content": {
                 "mod": "spaces-square"
+              },
+              "border": {
+                "width": 0,
+                "color": "border"
               }
             },
             {
@@ -58,14 +66,14 @@
               "min": 90,
               "content": {
                 "mod": "agents-square"
+              },
+              "border": {
+                "width": 0,
+                "color": "border"
               }
             }
           ],
-          "gap": 0,
-          "divider": {
-            "width": 1,
-            "color": "border"
-          }
+          "gap": 7
         },
         {
           "id": "sidebar-footer",
@@ -78,14 +86,14 @@
             "props": {
               "footer": true
             }
+          },
+          "border": {
+            "width": 0,
+            "color": "border"
           }
         }
       ],
-      "gap": 0,
-      "divider": {
-        "width": 1,
-        "color": "border"
-      }
+      "gap": 7
     },
     {
       "id": "work",
