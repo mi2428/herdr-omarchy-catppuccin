@@ -27,14 +27,14 @@
           "id": "brand",
           "type": "block",
           "size": {
-            "px": 46
+            "px": 42
           },
           "window_drag": true,
           "content": {
-            "mod": "workspace-chrome"
+            "mod": "workspace-chrome-square"
           },
           "border": {
-            "width": 2,
+            "width": 0,
             "color": "border"
           }
         },
@@ -50,10 +50,10 @@
               },
               "min": 90,
               "content": {
-                "mod": "spaces"
+                "mod": "spaces-square"
               },
               "border": {
-                "width": 2,
+                "width": 0,
                 "color": "border"
               }
             },
@@ -65,35 +65,35 @@
               },
               "min": 90,
               "content": {
-                "mod": "agents"
+                "mod": "agents-square"
               },
               "border": {
-                "width": 2,
+                "width": 0,
                 "color": "border"
               }
             }
           ],
-          "gap": 10
+          "gap": 7
         },
         {
           "id": "sidebar-footer",
           "type": "block",
           "size": {
-            "px": 69
+            "px": 28
           },
           "content": {
-            "mod": "workspace-chrome",
+            "mod": "workspace-chrome-square",
             "props": {
               "footer": true
             }
           },
           "border": {
-            "width": 2,
+            "width": 0,
             "color": "border"
           }
         }
       ],
-      "gap": 10
+      "gap": 7
     },
     {
       "id": "work",
@@ -111,7 +111,7 @@
             "mod": "tabs-files"
           },
           "border": {
-            "width": 2,
+            "width": 0,
             "color": "border"
           }
         },
@@ -119,7 +119,7 @@
           "id": "work-body",
           "type": "row",
           "padding": 0,
-          "gap": 10,
+          "gap": 7,
           "children": [
             {
               "id": "main",
@@ -127,23 +127,23 @@
               "content": {
                 "tab": "active",
                 "pane": {
-                  "gap": 10,
+                  "gap": 7,
                   "radius": 0,
                   "background": "#1e1e2eeb",
                   "lone": true,
                   "border": {
-                    "width": 2,
+                    "width": 0,
                     "color": "border"
                   },
                   "focus": {
-                    "width": 2,
+                    "width": 0,
                     "color": "accent"
                   },
                   "header": {
                     "content": {
-                      "mod": "pane"
+                      "mod": "pane-square"
                     },
-                    "height": 30,
+                    "height": 42,
                     "position": "top",
                     "reveal": "always"
                   }
@@ -177,7 +177,7 @@
               ],
               "background": "chrome",
               "border": {
-                "width": 2,
+                "width": 0,
                 "color": "border"
               }
             }
@@ -190,23 +190,24 @@
             "px": 28
           },
           "content": {
-            "mod": "workspace-status"
+            "mod": "workspace-status-square"
           },
           "border": {
-            "width": 2,
+            "width": 0,
             "color": "border"
           }
         }
       ],
-      "gap": 10
+      "gap": 7
     }
   ],
   "theme": "catppuccin-mocha",
   "font": "Summer Ghost",
   "font_size": 16,
   "ui_font": "Summer Ghost",
-  "padding": 10,
-  "gap": 10,
+  "padding": 1,
+  "gap": 7,
   "window_blur": true,
-  "terminal_opacity": 0
+  "terminal_opacity": 0,
+  "terminal_menu": "menu-square"
 }
