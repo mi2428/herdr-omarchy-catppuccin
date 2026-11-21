@@ -239,7 +239,7 @@ export default class Files extends View {
       .child(h_flex().h(31).flex_none().pl(16).pr(10).gap(8).items_center().text_size(11.5).text_color(t.dim)
         .child(div().child("Files"))
         .child(div().flex_1().min_w(0).truncate().text_right().child(this.root?.split(/[\\/]/).pop() ?? "")))
-      .child(v_flex().id("files-tree").flex_1().min_h(0).overflow_y_scrollbar().p(6).children(this.rows("", 0, [], t))
+      .child(v_flex().id("files-tree").flex_1().min_h(0).overflow_y_scrollbar().mode("scrolling").p(6).children(this.rows("", 0, [], t))
         .when(Boolean(this.error) || !this.entries.get("")?.length, el => el.child(div().p(8).text_size(12).text_color(t.dim).child(this.error || (this.loading ? "Loading files…" : this.root ? "No files" : "No folder"))))
         .when(this.limited, el => el.child(div().p(8).text_size(11).text_color(t.dim).child("File list limited to 500 entries per folder and 5,000 total"))));
   }

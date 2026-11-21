@@ -1,5 +1,5 @@
 import { View, div, svg, PathBuilder } from "gpui-kit";
-import { h_flex, v_flex, v_virtual_list } from "gpui-base";
+import { h_flex, v_flex, v_virtual_list, Scrollbar } from "gpui-base";
 import { spaces, panes, focused, exec, theme } from "herdr";
 import { parseHistory, graphRows } from "./history.js";
 
@@ -86,7 +86,7 @@ export default class GitGraph extends View {
         .child(div().id("graph-refresh").size(26).flex_none().flex().items_center().justify_center()
           .cursor_pointer().text_color(t.dim).hover(s => s.text_color(t.foreground))
           .on_click((_e, cx) => this.refresh(cx)).child(svg("mods/git-graph/refresh.svg").size(14))))
-      .child(v_flex().flex_1().min_h(0)
+      .child(v_flex().relative().flex_1().min_h(0)
         .when(Boolean(this.error) || (!this.rows.length && !this.loading), el => el.child(div().p(10).text_color(t.dim).child(this.error || "No commits")))
         .when(!this.rows.length && this.loading, el => el.child(div().p(10).text_color(t.dim).child("Loading history…")))
         .when(Boolean(this.rows.length), el => el.child(v_virtual_list("git-graph-commits", this.rows.length + Number(Boolean(this.more)),
@@ -95,6 +95,7 @@ export default class GitGraph extends View {
             const i = range.start + offset;
             return this.rows[i] ? this.row(this.rows[i], t) : div().id("graph-more").p(10).text_color(t.ansi4).cursor_pointer()
               .on_click((_e, cx) => { this.limit += 200; this.refresh(cx); }).child("Load more commits…");
-          })).flex_1().min_h(0))));
+          })).flex_1().min_h(0)))
+        .when(Boolean(this.rows.length), el => el.child(Scrollbar.vertical("git-graph-commits").mode("scrolling").absolute().inset_0())));
   }
 }
