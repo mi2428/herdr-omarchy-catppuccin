@@ -171,6 +171,13 @@
                       "content": {
                         "mod": "files-square"
                       }
+                    },
+                    {
+                      "id": "git",
+                      "type": "block",
+                      "content": {
+                        "mod": "git-graph"
+                      }
                     }
                   ]
                 }

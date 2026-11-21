@@ -173,7 +173,7 @@ export default class Tabs extends View {
       ? Math.max(10, (root.traffic_lights[0] + 64) / settings().zoom - (sidebar?.hidden ? 0 : sidebar?.size?.px ?? 0))
       : 10;
     const panel = find(root, "panel"), body = find(root, "panel-body");
-    const enabled = ["files"];
+    const enabled = ["files", "git"];
     this.syncPanel(space, panel, body, enabled);
     const panelButton = (id, label, icon, action) => {
       const on = !action && panel && !panel.hidden && body?.active === id;
@@ -193,6 +193,7 @@ export default class Tabs extends View {
         .children(shown.map(item)))
       .child(button("tab-new", "+", () => openOverlay({ mod: "new-menu-square", frame: "none", kind: "popup", width: 250, height: 512 })))
       .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/files/file.svg")))
+      .child(panelButton("git", "Git", "mods/git-graph/branch.svg"))
       .child(panelButton("changes", "Changes", "mods/changes/changes.svg", (_e, cx) => this.openLazygit(cx)))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))
         .child(button("maximize", w.platform === "windows" ? svg(`mods/tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", () => run("window.maximize")))
