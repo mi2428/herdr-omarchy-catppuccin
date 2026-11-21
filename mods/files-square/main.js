@@ -29,6 +29,11 @@ const fileIcon = (name) => {
   return FILE_ICONS[lower] ?? FILE_ICONS[lower.slice(lower.lastIndexOf(".") + 1)] ?? ["󰈙", "muted"];
 };
 const PER_FOLDER = 500, TOTAL = 5000;
+const VIEWERS = {
+  nvim: ["nvim", "-R", "--"],
+  bat: ["bat", "--paging=always", "--"],
+  less: ["less", "-R", "--"],
+};
 
 function changeCounts(output, top, root, marks) {
   const files = {}, folders = {};
@@ -85,6 +90,8 @@ export default class Files extends View {
       });
       return;
     }
+    this.fileViewer = config?.fileViewer ?? props()?.fileViewer ?? "nvim";
+    if (!Object.hasOwn(VIEWERS, this.fileViewer)) throw new Error(`Unknown fileViewer: ${this.fileViewer}`);
     this.saved = new Map();
     this.entries = new Map(); this.folders = new Set(); this.pending = new Set(); this.marks = {}; this.counts = { files: {}, folders: {} };
     this.refresh(cx);
@@ -190,9 +197,9 @@ export default class Files extends View {
       try {
         const args = ["run", "--json", "--bg", "--rm", "--cwd", root];
         if (on) args.push("--on", on);
-        args.push("--", "nvim", "-R", "--", `${root}/${path}`);
+        args.push("--", ...VIEWERS[this.fileViewer], `${root}/${path}`);
         const result = await exec("hc", args);
-        if (result.code !== 0) throw new Error(result.stderr || "Cannot start Neovim");
+        if (result.code !== 0) throw new Error(result.stderr || `Cannot start ${this.fileViewer}`);
         const terminal = JSON.parse(result.stdout).address;
         if (!terminal) throw new Error("No terminal address returned");
         try {

@@ -172,7 +172,8 @@
                       "min": 100,
                       "background": "chrome",
                       "content": {
-                        "mod": "files-square"
+                        "mod": "files-square",
+                        "props": { "fileViewer": "nvim" }
                       }
                     },
                     {
