@@ -2,9 +2,8 @@
 set -euo pipefail
 
 if [[ ${1:-} != --preview ]]; then
-  printf 'Working tree\n' | fzf --disabled --no-info --no-sort \
-    --header='Changes  (q to close)' \
-    --preview-window=up,90%,border-none,nowrap \
+  printf '\n' | fzf --disabled --no-input --no-info --no-sort --no-separator --pointer=' ' \
+    --preview-window=up,99%,border-none,nowrap \
     --preview='bash "$HOME/.config/herdr-app/mods/tabs-files/changes-diff.sh" --preview' \
     --bind='q:abort,resize:refresh-preview' >/dev/null || [[ $? -eq 1 ]]
   exit
