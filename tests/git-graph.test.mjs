@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 
 const source = readFileSync(new URL("../mods/git-graph/history.js", import.meta.url), "utf8");
 const { parseHistory, graphRows } = await import(`data:text/javascript,${encodeURIComponent(source)}`);
@@ -23,3 +24,20 @@ assert.deepEqual(rows.map(row => row.col), [0, 1, 0, 1]);
 assert.ok(rows[0].links.some(([a, , b]) => a === 0 && b === 1));
 assert.ok(rows[2].links.some(([a, , b]) => a === 0 && b === 1));
 assert.throws(() => parseHistory("\x1einvalid\x1f\x1f0\x1f\x1fTitle"), /Unexpected git log output/);
+
+const layout = JSON.parse(readFileSync(new URL("../layouts/omarchy-catppuccin.json", import.meta.url), "utf8"));
+const find = (node, id) => node.id === id ? node : node.children?.map(child => find(child, id)).find(Boolean);
+const panel = find(layout, "panel-body");
+assert.equal(panel.type, "column");
+assert.deepEqual(panel.children.map(child => [child.id, child.size.weight]), [["files", 1], ["git", 1]]);
+
+const tabsSource = readFileSync(new URL("../mods/tabs-files/main.js", import.meta.url), "utf8")
+  .replace(/^import .*$/gm, "").replace("export default class Tabs", "class Tabs");
+const actions = [];
+const Tabs = runInNewContext(`${tabsSource}\nTabs`, {
+  View: class {}, run: action => actions.push(action), localStorage: { setItem() {} },
+});
+const tabs = new Tabs();
+tabs.panels = { previous: "git" };
+tabs.syncPanel({ id: "previous" }, { hidden: true });
+assert.deepEqual(actions, ["layout.show"]);

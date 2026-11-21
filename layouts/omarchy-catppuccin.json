@@ -162,12 +162,13 @@
               "children": [
                 {
                   "id": "panel-body",
-                  "type": "stack",
-                  "active": "files",
+                  "type": "column",
                   "children": [
                     {
                       "id": "files",
                       "type": "block",
+                      "size": { "weight": 1 },
+                      "min": 100,
                       "content": {
                         "mod": "files-square"
                       }
@@ -175,6 +176,8 @@
                     {
                       "id": "git",
                       "type": "block",
+                      "size": { "weight": 1 },
+                      "min": 100,
                       "content": {
                         "mod": "git-graph"
                       }

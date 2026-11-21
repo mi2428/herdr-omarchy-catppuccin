@@ -102,19 +102,18 @@ export default class Tabs extends View {
     run(e.delta.y > 0 ? "tab.prev" : "tab.next");
   }
 
-  // The side panel is remembered per space: switching shows that space's choice
-  // (closed if it never had one), and opening or closing it records it.
-  syncPanel(space, panel, body, enabled) {
+  // Remember whether the shared Files/Git panel is open for each space.
+  syncPanel(space, panel) {
     if (!space || !panel) return;
-    const now = panel.hidden ? null : body?.active ?? null;
+    const now = panel.hidden ? null : "files";
     if (space.id !== this.space) {
       const first = this.space === undefined;
       this.space = space.id; this.pending = null;
       if (!(first && !(space.id in this.panels))) {
-        const stored = this.panels[space.id] ?? null, want = enabled.includes(stored) ? stored : null;
+        const stored = this.panels[space.id] ?? null, want = stored === "files" || stored === "git" ? "files" : null;
         if (want !== now) {
           this.pending = { want, until: Date.now() + 1000 };
-          if (want) { run("layout.select", { stack: "panel-body", child: want }); run("layout.show", { id: "panel" }); }
+          if (want) run("layout.show", { id: "panel" });
           else run("layout.hide", { id: "panel" });
           return;
         }
@@ -172,17 +171,16 @@ export default class Tabs extends View {
     const lightsPadding = w?.platform === "macos" && w.titlebar === "none" && !w.fullscreen && root?.traffic_lights
       ? Math.max(10, (root.traffic_lights[0] + 64) / settings().zoom - (sidebar?.hidden ? 0 : sidebar?.size?.px ?? 0))
       : 10;
-    const panel = find(root, "panel"), body = find(root, "panel-body");
-    const enabled = ["files", "git"];
-    this.syncPanel(space, panel, body, enabled);
+    const panel = find(root, "panel");
+    this.syncPanel(space, panel);
     const panelButton = (id, label, icon, action) => {
-      const on = !action && panel && !panel.hidden && body?.active === id;
+      const on = !action && panel && !panel.hidden;
       return h_flex().id(`panel-${id}`).h(26).px(8).gap(5).flex_none().items_center()
         .text_size(12).bg(on ? t.selected : t.chrome).text_color(on ? t.foreground : t.muted)
         .hover(s => s.bg(t.hover)).on_mouse_down("left", stop)
         .on_click(action ?? (() => {
           if (on) run("layout.hide", { id: "panel" });
-          else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: "panel" }); }
+          else run("layout.show", { id: "panel" });
         })).child(svg(icon).size(14)).child(label);
     };
     return h_flex().size_full().min_w(0).px(10).pl(lightsPadding).gap(3).items_center().bg(t.chrome)
@@ -192,7 +190,7 @@ export default class Tabs extends View {
         .on_size_change((_size, cx) => { if (active >= 0) { this.scroll.scroll_to_item(active); cx.notify(); } })
         .children(shown.map(item)))
       .child(button("tab-new", "+", () => openOverlay({ mod: "new-menu-square", frame: "none", kind: "popup", width: 250, height: 512 })))
-      .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/files/file.svg")))
+      .child(panelButton("files", "Files", "mods/files/file.svg"))
       .child(panelButton("git", "Git", "mods/git-graph/branch.svg"))
       .child(panelButton("changes", "Changes", "mods/changes/changes.svg", (_e, cx) => this.openLazygit(cx)))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))

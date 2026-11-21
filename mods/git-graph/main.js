@@ -3,7 +3,7 @@ import { h_flex, v_flex, v_virtual_list } from "gpui-base";
 import { spaces, panes, focused, exec, theme } from "herdr";
 import { parseHistory, graphRows } from "./history.js";
 
-const ROW = 42, STEP = 14, COLORS = ["ansi4", "ansi5", "ansi2", "ansi3", "ansi6", "ansi1"];
+const ROW = 28, STEP = 14, COLORS = ["ansi4", "ansi5", "ansi2", "ansi3", "ansi6", "ansi1"];
 const pad = n => String(n).padStart(2, "0");
 const date = seconds => {
   const d = new Date(seconds * 1000);
@@ -64,7 +64,7 @@ export default class GitGraph extends View {
     return h_flex().h(ROW).flex_none().px(7).gap(4).items_center()
       .when(row.refs.some(ref => ref.kind === "head"), el => el.bg(t.selected))
       .child(this.lines(row, t))
-      .child(v_flex().flex_1().min_w(0).gap(3)
+      .child(v_flex().flex_1().min_w(0).gap(0)
         .child(div().truncate().text_color(t.foreground).child(row.title || "(no message)"))
         .when(Boolean(row.refs.length), el => el.child(h_flex().gap(3).min_w(0)
           .children(labels.map(ref => div().max_w(96).truncate().px(4).text_size(10)
