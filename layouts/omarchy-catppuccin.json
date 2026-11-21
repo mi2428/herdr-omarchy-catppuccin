@@ -170,6 +170,7 @@
                       "type": "block",
                       "size": { "weight": 1 },
                       "min": 100,
+                      "background": "#1e1e2e",
                       "content": {
                         "mod": "files-square"
                       }
@@ -179,6 +180,7 @@
                       "type": "block",
                       "size": { "weight": 1 },
                       "min": 100,
+                      "background": "#1e1e2e",
                       "content": {
                         "mod": "git-graph"
                       }
@@ -186,7 +188,7 @@
                   ]
                 }
               ],
-              "background": "canvas",
+              "background": "#11111b",
               "border": {
                 "width": 0,
                 "color": "border"
