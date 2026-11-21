@@ -156,6 +156,7 @@ export default class Tabs extends View {
     const t = theme();
     const space = spaces().find(p => p.active);
     const shown = space?.tabs ?? [];
+    const managed = new Set(terminals().filter(t => t.state === "live" && t.parent && t.labels?.["herdr.supervised"] === "1").map(t => t.address));
     const active = shown.findIndex(tab => tab.active);
     const selected = shown[active]?.id;
     if (selected !== this.selected || active !== this.selectedIndex) {
@@ -168,12 +169,13 @@ export default class Tabs extends View {
       .on_mouse_down("left", stop).on_click(action).child(label);
     const item = (c, i) => {
       const lead = panes().find(p => p.tab === c.id && p.program?.agent) ?? panes().find(p => p.tab === c.id);
+      const supervised = panes().some(p => p.tab === c.id && managed.has(p.terminal));
       const program = lead?.program;
       const name = label(c, lead);
       return h_flex().id(`tab-${c.id}`).h(29).px(10).gap(7).items_center().flex_none().text_size(12.8)
         // A rename or status dot on this or an earlier tab can push the active one out.
         .when(i <= active, el => el.on_size_change((_size, cx) => { this.scroll.scroll_to_item(active); cx.notify(); }))
-        .border(1).border_color(c.active ? t.border : t.chrome).bg(c.active ? t.raised : t.chrome).text_color(c.active ? t.foreground : t.muted)
+        .border(1).border_color(c.active ? t.border : t.chrome).bg(supervised ? t.accent + (c.active ? "45" : "30") : c.active ? t.raised : t.chrome).text_color(c.active ? t.foreground : t.muted)
         .hover(s => s.bg(t.hover))
         .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.pressed = i; if (e.click_count === 2) run("tab.rename", { id: c.id }); })
         .on_mouse_up("left", () => {

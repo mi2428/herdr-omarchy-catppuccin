@@ -186,7 +186,7 @@ export default class Agents extends View {
     const on = k.address === shown;
     return h_flex()
       .id(`sub-${k.address}`)
-      .pl(39)
+      .pl(8)
       .pr(8)
 
       .h(26)
