@@ -29,11 +29,11 @@ function label(tab, lead) {
 
 export default class Tabs extends View {
   init(config, cx) {
-    this.lazygit = config?.terminal ?? props()?.terminal;
-    if (this.lazygit) {
+    this.changes = config?.terminal ?? props()?.terminal;
+    if (this.changes) {
       const overlay = config?.overlay ?? props()?.overlay;
       cx.timer.every(1000, () => {
-        if (!terminals().some(t => t.address === this.lazygit && t.state === "live")) closeOverlay(overlay);
+        if (!terminals().some(t => t.address === this.changes && t.state === "live")) closeOverlay(overlay);
       });
       return;
     }
@@ -45,24 +45,24 @@ export default class Tabs extends View {
   }
 
   close() {
-    if (this.lazygit && terminals().some(t => t.address === this.lazygit && t.state === "live")) run("terminal.kill", { terminal: this.lazygit });
+    if (this.changes && terminals().some(t => t.address === this.changes && t.state === "live")) run("terminal.kill", { terminal: this.changes });
   }
 
-  openLazygit(cx) {
+  openChanges(cx) {
     if (this.opening) return;
     const space = spaces().find(s => s.active), f = focused();
     const pane = f?.pane ? panes().find(p => p.pane === f.pane) : null;
     const cwd = pane?.cwd || f?.cwd || space?.folder;
     const on = f?.pane === null ? (f.terminal?.includes("/") ? f.terminal.split("/")[0] : null) : space?.machine ?? null;
-    if (!cwd) { notify({ title: "Cannot open Lazygit", body: "No folder selected", level: "error" }); return; }
+    if (!cwd) { notify({ title: "Cannot open Changes", body: "No folder selected", level: "error" }); return; }
     this.opening = true;
     cx.spawn(async () => {
       try {
         const args = ["run", "--json", "--bg", "--rm", "--cwd", cwd];
         if (on) args.push("--on", on);
-        args.push("--", "lazygit");
+        args.push("--", "bash", "-c", 'exec bash "$HOME/.config/herdr-app/mods/tabs-files/changes-diff.sh"');
         const result = await exec("hc", args);
-        if (result.code !== 0) throw new Error(result.stderr || "Cannot start Lazygit");
+        if (result.code !== 0) throw new Error(result.stderr || "Cannot start Changes");
         const terminal = JSON.parse(result.stdout).address;
         if (!terminal) throw new Error("No terminal address returned");
         try {
@@ -74,7 +74,7 @@ export default class Tabs extends View {
           await exec("hc", ["kill", terminal]);
           throw e;
         }
-      } catch (e) { notify({ title: "Cannot open Lazygit", body: String(e), level: "error" }); }
+      } catch (e) { notify({ title: "Cannot open Changes", body: String(e), level: "error" }); }
       finally { this.opening = false; }
     });
   }
@@ -130,7 +130,7 @@ export default class Tabs extends View {
   }
 
   render() {
-    if (this.lazygit) return div();
+    if (this.changes) return div();
     const t = theme();
     const space = spaces().find(p => p.active);
     const shown = space?.tabs ?? [];
@@ -192,7 +192,7 @@ export default class Tabs extends View {
       .child(button("tab-new", "+", () => openOverlay({ mod: "new-menu-square", frame: "none", kind: "popup", width: 250, height: 512 })))
       .child(panelButton("files", "Files", "mods/files/file.svg"))
       .child(panelButton("git", "Git", "mods/git-graph/branch.svg"))
-      .child(panelButton("changes", "Changes", "mods/changes/changes.svg", (_e, cx) => this.openLazygit(cx)))
+      .child(panelButton("changes", "Changes", "mods/changes/changes.svg", (_e, cx) => this.openChanges(cx)))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))
         .child(button("maximize", w.platform === "windows" ? svg(`mods/tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", () => run("window.maximize")))
         .child(button("close-window", w.platform === "windows" ? svg("mods/tabs/win-close.svg").size(16) : svg("mods/pane/close.svg").size(13), () => run("window.close"))));

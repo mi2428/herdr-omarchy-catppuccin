@@ -12,7 +12,7 @@ const Tabs = runInNewContext(`${source}\nTabs`, {
   terminals: () => live ? [{ address: "t1", state: "live" }] : [],
   exec: async (cmd, args) => {
     assert.equal(cmd, "hc");
-    assert.deepEqual(Array.from(args), ["run", "--json", "--bg", "--rm", "--cwd", "/repo", "--", "lazygit"]);
+    assert.deepEqual(Array.from(args), ["run", "--json", "--bg", "--rm", "--cwd", "/repo", "--", "bash", "-c", 'exec bash "$HOME/.config/herdr-app/mods/tabs-files/changes-diff.sh"']);
     return { code: 0, stdout: '{"address":"t1"}' };
   },
   openOverlay: spec => { opened = spec; },
@@ -21,7 +21,7 @@ const Tabs = runInNewContext(`${source}\nTabs`, {
   notify: error => { throw Error(JSON.stringify(error)); },
 });
 
-new Tabs().openLazygit({ spawn: fn => { pending = fn(); } });
+new Tabs().openChanges({ spawn: fn => { pending = fn(); } });
 await pending;
 assert.equal(opened.kind, "dialog");
 assert.equal(opened.layout.background, "#1e1e2eeb");
