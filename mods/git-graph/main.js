@@ -80,8 +80,8 @@ export default class GitGraph extends View {
     if (JSON.stringify(location()) !== this.context) this.refresh(cx);
     const t = theme();
     return v_flex().id("git-graph").size_full().min_h(0).overflow_hidden().bg(t.background).text_size(12)
-      .child(h_flex().h(42).flex_none().px(14).items_center()
-        .child(div().font_semibold().text_color(t.foreground).child("Git Graph"))
+      .child(h_flex().h(31).flex_none().pl(16).pr(10).items_center().text_size(11.5).text_color(t.dim).bg(t.chrome)
+        .child(div().child("Git Graph"))
         .child(div().flex_1())
         .child(div().id("graph-refresh").size(26).flex_none().flex().items_center().justify_center()
           .cursor_pointer().text_color(t.dim).hover(s => s.text_color(t.foreground))
