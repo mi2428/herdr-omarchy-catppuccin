@@ -11,6 +11,19 @@ function find(node, id) {
   return null;
 }
 
+function panelMask(panel) {
+  if (!panel || panel.hidden) return 0;
+  return (find(panel, "files")?.hidden ? 0 : 1) | (find(panel, "git")?.hidden ? 0 : 2);
+}
+
+function showPanel(mask) {
+  if (mask) {
+    run(mask & 1 ? "layout.show" : "layout.hide", { id: "files" });
+    run(mask & 2 ? "layout.show" : "layout.hide", { id: "git" });
+  }
+  run(mask ? "layout.show" : "layout.hide", { id: "panel" });
+}
+
 // Same as the agents mod: drops a status glyph, keeps a leading bracket or quote.
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}\p{Ps}\p{Pi}]+/u, "").replace(/^\[ [!.] \] /, "").trim();
 
@@ -102,19 +115,19 @@ export default class Tabs extends View {
     run(e.delta.y > 0 ? "tab.prev" : "tab.next");
   }
 
-  // Remember whether the shared Files/Git panel is open for each space.
+  // Remember which right-side panes are visible in each space.
   syncPanel(space, panel) {
     if (!space || !panel) return;
-    const now = panel.hidden ? null : "files";
+    const now = panelMask(panel);
     if (space.id !== this.space) {
       const first = this.space === undefined;
       this.space = space.id; this.pending = null;
       if (!(first && !(space.id in this.panels))) {
-        const stored = this.panels[space.id] ?? null, want = stored === "files" || stored === "git" ? "files" : null;
+        const stored = this.panels[space.id];
+        const want = stored === "files" || stored === "git" ? 3 : Number.isInteger(stored) && stored >= 0 && stored <= 3 ? stored : 0;
         if (want !== now) {
           this.pending = { want, until: Date.now() + 1000 };
-          if (want) run("layout.show", { id: "panel" });
-          else run("layout.hide", { id: "panel" });
+          showPanel(want);
           return;
         }
       }
@@ -127,6 +140,15 @@ export default class Tabs extends View {
     if (this.panels[space.id] === now) return;
     this.panels[space.id] = now;
     localStorage.setItem("panels", JSON.stringify(this.panels));
+  }
+
+  togglePanel(id, space, panel) {
+    if (!space || !panel) return;
+    const want = (this.pending?.want ?? panelMask(panel)) ^ (id === "files" ? 1 : 2);
+    this.pending = { want, until: Date.now() + 1000 };
+    this.panels[space.id] = want;
+    localStorage.setItem("panels", JSON.stringify(this.panels));
+    showPanel(want);
   }
 
   render() {
@@ -174,14 +196,11 @@ export default class Tabs extends View {
     const panel = find(root, "panel");
     this.syncPanel(space, panel);
     const panelButton = (id, label, icon, action) => {
-      const on = !action && panel && !panel.hidden;
+      const on = !action && Boolean(panelMask(panel) & (id === "files" ? 1 : 2));
       return h_flex().id(`panel-${id}`).h(26).px(8).gap(5).flex_none().items_center()
         .text_size(12).bg(on ? t.selected : t.chrome).text_color(on ? t.foreground : t.muted)
         .hover(s => s.bg(t.hover)).on_mouse_down("left", stop)
-        .on_click(action ?? (() => {
-          if (on) run("layout.hide", { id: "panel" });
-          else run("layout.show", { id: "panel" });
-        })).child(svg(icon).size(14)).child(label);
+        .on_click(action ?? (() => this.togglePanel(id, space, panel))).child(svg(icon).size(14)).child(label);
     };
     return h_flex().size_full().min_w(0).px(10).pl(lightsPadding).gap(3).items_center().bg(t.chrome)
       .on_mouse_up("left", () => { this.pressed = null; })

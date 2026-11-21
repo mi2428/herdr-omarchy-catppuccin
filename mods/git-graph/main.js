@@ -48,7 +48,8 @@ export default class GitGraph extends View {
   }
 
   lines(row, t) {
-    const height = rowHeight(row), x = col => 9 + col * STEP, y = fraction => fraction * height;
+    const height = rowHeight(row), dot = row.refs.length ? ROW / 2 + 1 : height / 2;
+    const x = col => 9 + col * STEP, y = fraction => fraction === 0.5 ? dot : fraction * height;
     return div().relative().w(Math.min(this.columns * STEP + 10, 150)).h(height).flex_none().overflow_hidden()
       .children(row.links.map(([from, top, to, bottom, color]) => {
         let path = PathBuilder.stroke(1.6).move_to(x(from), y(top));
@@ -56,7 +57,7 @@ export default class GitGraph extends View {
           : path.cubic_bezier_to(x(to), y(bottom), x(from), y(top) + 9, x(to), y(bottom) - 9);
         return window.paint_path(path.build(), t[COLORS[color % COLORS.length]]).absolute().inset_0().size_full();
       }))
-      .child(div().absolute().left(x(row.col) - 4).top(height / 2 - 4).size(8).rounded_full()
+      .child(div().absolute().left(x(row.col) - 4).top(dot - 4).size(8).rounded_full()
         .bg(t[COLORS[row.col % COLORS.length]]));
   }
 

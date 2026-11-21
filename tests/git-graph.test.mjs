@@ -38,11 +38,26 @@ assert.equal(mocha.colors.canvas, "#00000000");
 
 const tabsSource = readFileSync(new URL("../mods/tabs-files/main.js", import.meta.url), "utf8")
   .replace(/^import .*$/gm, "").replace("export default class Tabs", "class Tabs");
-const actions = [];
-const Tabs = runInNewContext(`${tabsSource}\nTabs`, {
-  View: class {}, run: action => actions.push(action), localStorage: { setItem() {} },
+const actions = [], right = structuredClone(find(layout, "panel"));
+const { Tabs, panelMask } = runInNewContext(`${tabsSource}\n({ Tabs, panelMask })`, {
+  View: class {}, run: (action, { id }) => {
+    actions.push([action, id]);
+    find(right, id).hidden = action === "layout.hide";
+  }, localStorage: { setItem() {} },
 });
+right.hidden = true;
 const tabs = new Tabs();
 tabs.panels = { previous: "git" };
-tabs.syncPanel({ id: "previous" }, { hidden: true });
-assert.deepEqual(actions, ["layout.show"]);
+tabs.syncPanel({ id: "previous" }, right);
+assert.equal(panelMask(right), 3);
+assert.deepEqual(actions, [["layout.show", "files"], ["layout.show", "git"], ["layout.show", "panel"]]);
+
+const space = { id: "previous" };
+for (const [button, visible] of [["files", 2], ["git", 0], ["files", 1], ["git", 3]]) {
+  tabs.togglePanel(button, space, right);
+  assert.equal(panelMask(right), visible);
+  assert.equal(tabs.panels[space.id], visible);
+}
+assert.equal(right.hidden, false);
+assert.equal(find(right, "files").hidden, false);
+assert.equal(find(right, "git").hidden, false);
