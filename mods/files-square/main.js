@@ -171,7 +171,7 @@ export default class Files extends View {
       if (out.length >= TOTAL) break;
       const path = prefix ? `${prefix}/${entry.name}` : entry.name, open = this.folders.has(path), mark = this.marks[`${this.root}/${path}`];
       const [glyph, color] = entry.dir ? [open ? "" : "", "ansi4"] : fileIcon(entry.name);
-      out.push(h_flex().id(`file-${path}`).h(28).flex_none().pl(8 + depth * 18).pr(8).gap(7).items_center().cursor_pointer().hover(s => s.bg(t.hover))
+      out.push(h_flex().id(`file-${path}`).h(22).flex_none().pl(8 + depth * 18).pr(8).gap(7).items_center().cursor_pointer().hover(s => s.bg(t.hover))
         .on_click((_e, cx) => entry.dir ? this.toggle(path, cx) : this.show(path, cx))
         .child(entry.dir ? svg(`mods/files/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
         .child(div().w(14).flex_none().font_family("JetBrainsMono Nerd Font").text_size(15).text_color(t[color]).child(glyph))
