@@ -163,8 +163,8 @@ export default class Files extends View {
         const terminal = JSON.parse(result.stdout).address;
         if (!terminal) throw new Error("No terminal address returned");
         try {
-          openOverlay({ kind: "dialog", width: 0.8, height: 0.8, layout: { type: "column", children: [
-            { type: "block", size: { px: 36 }, content: { mod: "files-square", props: { terminal, name: path } } },
+          openOverlay({ kind: "dialog", frame: "none", width: 0.8, height: 0.8, layout: { type: "column", background: "#1e1e2ef2", radius: 0, children: [
+            { type: "block", size: { px: 25 }, content: { mod: "files-square", props: { terminal, name: path } } },
             { type: "block", content: { terminal } },
           ] } });
         } catch (e) {
@@ -196,7 +196,7 @@ export default class Files extends View {
   render(cx) {
     if (this.viewer) {
       const { name, overlay } = props() ?? {}, t = theme();
-      return h_flex().size_full().px(12).items_center().bg(t.surface).text_color(t.foreground)
+      return h_flex().size_full().px(12).items_center().text_color(t.foreground)
         .child(div().flex_1().truncate().child(name ?? ""))
         .child(div().id("files-viewer-close").px(8).cursor_pointer().hover(s => s.bg(t.hover))
           .on_click(() => closeOverlay(overlay)).child("✕"));
