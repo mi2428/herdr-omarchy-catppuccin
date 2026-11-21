@@ -30,6 +30,26 @@ const fileIcon = (name) => {
 };
 const PER_FOLDER = 500, TOTAL = 5000;
 
+function changeCounts(output, top, root, marks) {
+  const files = {}, folders = {};
+  for (const line of output.split("\0").filter(Boolean)) {
+    const match = /^(\d+|-)\t(\d+|-)\t([\s\S]*)$/.exec(line);
+    if (!match) throw new Error("Invalid git numstat output");
+    if (match[1] !== "-" && match[2] !== "-") files[`${top}/${match[3]}`] = [Number(match[1]), Number(match[2])];
+  }
+  for (const path of Object.keys(marks)) {
+    if (!path.startsWith(root + "/")) continue;
+    const parts = path.slice(root.length + 1).split("/"), count = files[path];
+    for (let i = 1; i < parts.length; i++) {
+      const folder = `${root}/${parts.slice(0, i).join("/")}`;
+      const total = folders[folder] ??= [0, 0, true];
+      if (count) { total[0] += count[0]; total[1] += count[1]; }
+      else total[2] = false;
+    }
+  }
+  return { files, folders };
+}
+
 async function directory(path, on) {
   const windowsDirectory = async () => {
     // Windows PowerShell otherwise uses the console code page; exec decodes UTF-8.
@@ -66,7 +86,7 @@ export default class Files extends View {
       return;
     }
     this.saved = new Map();
-    this.entries = new Map(); this.folders = new Set(); this.pending = new Set(); this.marks = {};
+    this.entries = new Map(); this.folders = new Set(); this.pending = new Set(); this.marks = {}; this.counts = { files: {}, folders: {} };
     this.refresh(cx);
     cx.timer.every(10000, cx => this.refresh(cx));
   }
@@ -104,7 +124,7 @@ export default class Files extends View {
       if (this.context) this.saved.set(this.context.key, { folders: this.folders });
       const saved = this.saved.get(next);
       this.context = { key: next, cwd, on }; this.root = cwd; this.on = on; this.entries = new Map(); this.folders = new Set(saved?.folders);
-      this.pending = new Set(); this.marks = {}; this.watched = null; this.error = null; this.limited = false;
+      this.pending = new Set(); this.marks = {}; this.counts = { files: {}, folders: {} }; this.watched = null; this.error = null; this.limited = false;
       this.loading = false;
     }
     if (!cwd || this.loading) return;
@@ -119,6 +139,7 @@ export default class Files extends View {
         }
         const top = await exec("git", ["rev-parse", "--show-toplevel"], { cwd, on }).catch(() => null);
         const marks = {};
+        let counts = { files: {}, folders: {} };
         if (top?.code === 0) {
           // Writes nothing under .git (index lock, fsmonitor cookie): the folder watch would refresh again.
           const status = await exec("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", "status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all"], { cwd, on }).catch(() => null);
@@ -126,9 +147,15 @@ export default class Files extends View {
             const xy = entry.slice(0, 2);
             marks[`${top.stdout.trim()}/${entry.slice(3)}`] = xy === "??" || xy.includes("A") ? "A" : xy.includes("U") ? "U" : xy.includes("D") ? "D" : "M";
           }
+          if (status?.code === 0) {
+            const head = await exec("git", ["rev-parse", "--verify", "HEAD"], { cwd, on });
+            const diff = await exec("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", "diff", "--numstat", "-z", "--no-renames", ...(head.code === 0 ? ["HEAD"] : ["--cached"])], { cwd, on });
+            if (diff.code !== 0) throw new Error(diff.stderr || "Cannot count Git changes");
+            counts = changeCounts(diff.stdout, top.stdout.trim(), cwd, marks);
+          }
         }
         if (!this.current(context)) return;
-        this.marks = marks; this.error = null; this.watch(cwd, cx);
+        this.marks = marks; this.counts = counts; this.error = null; this.watch(cwd, cx);
       } catch (e) { if (this.current(context)) this.error = String(e); }
       finally { if (this.context === context) this.loading = false; cx.notify(); }
     });
@@ -186,14 +213,19 @@ export default class Files extends View {
     if (out.length >= TOTAL || depth > 40) return out;
     for (const entry of this.entries.get(prefix) ?? []) {
       if (out.length >= TOTAL) break;
-      const path = prefix ? `${prefix}/${entry.name}` : entry.name, open = this.folders.has(path), mark = this.marks[`${this.root}/${path}`];
+      const path = prefix ? `${prefix}/${entry.name}` : entry.name, open = this.folders.has(path), absolute = `${this.root}/${path}`;
+      const count = (entry.dir ? this.counts.folders : this.counts.files)[absolute];
+      const mark = entry.dir ? (!open && (count || this.marks[absolute]) ? "M" : null) : this.marks[absolute];
       const [glyph, color] = entry.dir ? [open ? "" : "", "ansi4"] : fileIcon(entry.name);
       out.push(h_flex().id(`file-${path}`).h(22).flex_none().pl(8 + depth * 18).pr(8).gap(7).items_center().cursor_pointer().hover(s => s.bg(t.hover))
         .on_click((_e, cx) => entry.dir ? this.toggle(path, cx) : this.show(path, cx))
         .child(entry.dir ? svg(`mods/files/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(t.dim) : div().w(12).flex_none())
         .child(div().w(14).flex_none().font_family("JetBrainsMono Nerd Font").text_size(15).text_color(t[color]).child(glyph))
         .child(div().flex_1().min_w(0).truncate().child(entry.name))
-        .when(Boolean(mark), el => el.child(div().text_size(11).text_color(mark === "A" ? t.ansi2 : mark === "D" || mark === "U" ? t.ansi1 : t.blocked).child(mark))));
+        .when(Boolean(mark), el => el
+          .when(count && count[2] !== false, el => el.child(div().text_size(11).text_color(t.ansi2).child(`+${count[0]}`))
+            .child(div().text_size(11).text_color(t.ansi1).child(`-${count[1]}`)))
+          .child(div().text_size(11).text_color(mark === "A" ? t.ansi2 : mark === "D" || mark === "U" ? t.ansi1 : t.blocked).child(mark))));
       if (entry.dir && open) this.rows(path, depth + 1, out, t);
     }
     return out;
@@ -204,7 +236,7 @@ export default class Files extends View {
     if (key() !== this.context?.key) this.refresh(cx);
     const t = theme();
     return v_flex().id("files").size_full().min_h(0).overflow_hidden().bg(t.background).text_color(t.foreground).text_size(13)
-      .child(h_flex().h(31).flex_none().pl(16).pr(10).gap(8).items_center().text_size(11.5).text_color(t.dim).bg(t.chrome)
+      .child(h_flex().h(31).flex_none().pl(16).pr(10).gap(8).items_center().text_size(11.5).text_color(t.dim)
         .child(div().child("Files"))
         .child(div().flex_1().min_w(0).truncate().text_right().child(this.root?.split(/[\\/]/).pop() ?? "")))
       .child(v_flex().id("files-tree").flex_1().min_h(0).overflow_y_scrollbar().p(6).children(this.rows("", 0, [], t))
