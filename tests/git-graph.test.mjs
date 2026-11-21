@@ -29,6 +29,7 @@ const layout = JSON.parse(readFileSync(new URL("../layouts/omarchy-catppuccin.js
 const find = (node, id) => node.id === id ? node : node.children?.map(child => find(child, id)).find(Boolean);
 const panel = find(layout, "panel-body");
 assert.equal(panel.type, "column");
+assert.equal(panel.gap, find(layout, "sidebar-lists").gap);
 assert.deepEqual(panel.children.map(child => [child.id, child.size.weight]), [["files", 1], ["git", 1]]);
 
 const tabsSource = readFileSync(new URL("../mods/tabs-files/main.js", import.meta.url), "utf8")

@@ -163,6 +163,7 @@
                 {
                   "id": "panel-body",
                   "type": "column",
+                  "gap": 7,
                   "children": [
                     {
                       "id": "files",
@@ -185,7 +186,7 @@
                   ]
                 }
               ],
-              "background": "chrome",
+              "background": "canvas",
               "border": {
                 "width": 0,
                 "color": "border"
