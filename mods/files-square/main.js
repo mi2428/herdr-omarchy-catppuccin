@@ -1,7 +1,7 @@
 // A lazy file browser for the focused pane's folder.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, panes, focused, exec, watchFolder, theme, window, openOverlay, closeOverlay, notify, props, run } from "herdr";
+import { spaces, panes, focused, exec, watchFolder, theme, window, openOverlay, closeOverlay, notify, props, run, terminals } from "herdr";
 
 function location() {
   const space = spaces().find(s => s.active), f = focused();
@@ -58,7 +58,13 @@ async function directory(path, on) {
 export default class Files extends View {
   init(config, cx) {
     this.viewer = config?.terminal ?? props()?.terminal;
-    if (this.viewer) return;
+    if (this.viewer) {
+      const overlay = config?.overlay ?? props()?.overlay;
+      cx.timer.every(1000, () => {
+        if (!terminals().some(t => t.address === this.viewer && t.state === "live")) closeOverlay(overlay);
+      });
+      return;
+    }
     this.saved = new Map();
     this.entries = new Map(); this.folders = new Set(); this.pending = new Set(); this.marks = {};
     this.refresh(cx);
@@ -66,7 +72,7 @@ export default class Files extends View {
   }
 
   close() {
-    if (this.viewer) run("terminal.kill", { terminal: this.viewer });
+    if (this.viewer && terminals().some(t => t.address === this.viewer && t.state === "live")) run("terminal.kill", { terminal: this.viewer });
   }
 
   watch(root, cx) {
@@ -163,8 +169,8 @@ export default class Files extends View {
         const terminal = JSON.parse(result.stdout).address;
         if (!terminal) throw new Error("No terminal address returned");
         try {
-          openOverlay({ kind: "dialog", frame: "none", width: 0.8, height: 0.8, layout: { type: "column", background: "#1e1e2ef2", radius: 0, children: [
-            { type: "block", size: { px: 25 }, content: { mod: "files-square", props: { terminal, name: path } } },
+          openOverlay({ kind: "dialog", frame: "none", width: 0.8, height: 0.8, layout: { type: "column", background: "#1e1e2eeb", radius: 0, children: [
+            { type: "block", size: { px: 0 }, content: { mod: "files-square", props: { terminal } } },
             { type: "block", content: { terminal } },
           ] } });
         } catch (e) {
@@ -194,13 +200,7 @@ export default class Files extends View {
   }
 
   render(cx) {
-    if (this.viewer) {
-      const { name, overlay } = props() ?? {}, t = theme();
-      return h_flex().size_full().px(12).items_center().text_color(t.foreground)
-        .child(div().flex_1().truncate().child(name ?? ""))
-        .child(div().id("files-viewer-close").px(8).cursor_pointer().hover(s => s.bg(t.hover))
-          .on_click(() => closeOverlay(overlay)).child("✕"));
-    }
+    if (this.viewer) return div();
     if (key() !== this.context?.key) this.refresh(cx);
     const t = theme();
     return v_flex().id("files").size_full().min_h(0).overflow_hidden().bg(t.background).text_color(t.foreground).text_size(13)
