@@ -1,6 +1,6 @@
 # Omarchy Catppuccin
 
-A square-edged Herdr window in Catppuccin Mocha colors: spaces and agents on the left, tabs and live terminals in the center, optional Files and Git panels on the right, and a compact status bar below. It uses transparent canvas, dark chrome, the Summer Ghost font, and a separate Git graph instead of the app's default rounded panels.
+Built to feel at home on an Omarchy desktop running Hyprland with Catppuccin Mocha. Square corners, tight spacing, a transparent canvas, and Mocha-colored chrome let Herdr blend with Omarchy's tiled windows instead of looking like a separate rounded app. Spaces and agents stay visible beside the terminals, with Files and Git close at hand.
 
 ![Omarchy Catppuccin](preview.png)
 
