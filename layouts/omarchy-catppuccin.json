@@ -71,21 +71,6 @@
                 "width": 0,
                 "color": "border"
               }
-            },
-            {
-              "id": "supervisor",
-              "type": "block",
-              "size": {
-                "px": 170
-              },
-              "min": 90,
-              "content": {
-                "mod": "supervisor-overview"
-              },
-              "border": {
-                "width": 0,
-                "color": "border"
-              }
             }
           ],
           "gap": 7

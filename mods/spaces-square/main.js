@@ -1,11 +1,11 @@
 // Workspace spaces: stable colored avatars, worktrees under their checkout,
 // grouped by machine when more than one is known. After a space's name, the repo
-// its first terminal is in now, only where unusual: branch, ahead/behind. Agent state lives in the agents list, not here. Click to
+// its first terminal is in now, only where unusual: branch, ahead/behind. Attention counts live here; agent details stay in Agents. Click to
 // switch, right-click for its menu, drag to reorder.
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
-import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
+import { spaces, machines, panes, agents, terminals, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -60,6 +60,30 @@ export function glyph(status) {
 
 export function tone(t, status) {
   return t[status] ?? t.unknown;
+}
+
+export function attentionBySpace(sp, listed, all) {
+  const counts = new Map(sp.map(s => [s.id, { blocked: 0, review: 0 }]));
+  const byAddress = new Map(listed.map(a => [a.address, a]));
+  const live = new Map(all.filter(t => t.state === "live").map(t => [t.address, t]));
+  const spaceOf = (t) => {
+    const seen = new Set();
+    while (t && !seen.has(t.address)) {
+      seen.add(t.address);
+      const id = byAddress.get(t.address)?.space ?? t.labels?.["herdr.space"];
+      if (counts.has(id)) return id;
+      t = live.get(t.parent);
+    }
+    return null;
+  };
+  for (const a of listed) if (a.status === "blocked" && counts.has(a.space)) counts.get(a.space).blocked++;
+  for (const t of live.values()) {
+    const id = spaceOf(t);
+    if (!id) continue;
+    if (!byAddress.has(t.address) && (t.status === "blocked" || t.status === "error")) counts.get(id).blocked++;
+    if (t.labels?.["herdr.supervised"] === "1" && t.labels?.["herdr.review"] === "pending") counts.get(id).review++;
+  }
+  return counts;
 }
 
 export default class Spaces extends View {
@@ -443,6 +467,7 @@ export default class Spaces extends View {
 
   row({ w, i, g, tree }, t) {
     const on = w.active;
+    const attention = this.attention.get(w.id);
     const fromIndex = this.pressed === null ? -1 : spaces().findIndex(s => s.id === this.pressed);
     const colors = shared("space.colors") ?? {};
     const color = colors[w.id] ?? "ansi6";
@@ -494,11 +519,16 @@ export default class Spaces extends View {
           .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).flex_none().text_color(t.dim)))
           .when(!tree, el => el.child(h_flex().size(18).flex_none().bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color("#ffffff").child([...w.name][0]?.toUpperCase() ?? "?")))
           .child(div().flex_initial().min_w(SIDE_MIN).truncate().text_color(t.foreground).child(w.name))
-          .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1()),
+          .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
+          .when(attention?.blocked > 0, el => el.child(div().flex_none().text_size(10.5).text_color(t.blocked)
+            .tooltip(`${attention.blocked} agents need you`).child(`!${attention.blocked}`)))
+          .when(attention?.review > 0, el => el.child(div().flex_none().text_size(10.5).text_color(t.accent)
+            .tooltip(`${attention.review} reviews pending`).child(`R${attention.review}`))),
       );
   }
 
   compact({ w, i }, t) {
+    const attention = this.attention.get(w.id);
     return railCell(h_flex()
       .id(`space-${w.id}`)
       .relative()
@@ -509,6 +539,7 @@ export default class Spaces extends View {
       .items_center()
       .when(w.active, (el) => el.bg(t.selected))
       .when(!w.active, (el) => el.hover((s) => s.bg(t.hover)))
+      .when(attention?.blocked > 0 || attention?.review > 0, el => el.tooltip(`${attention.blocked} need you · ${attention.review} reviews pending`))
       .on_click(() => run("space.select", { id: w.id }))
       .child(div().text_color(w.active ? t.foreground : t.muted).child(String(i + 1)))
       .child(div().absolute().right(5).text_color(tone(t, w.status)).child(glyph(w.status))));
@@ -519,6 +550,7 @@ export default class Spaces extends View {
     const collapsed = narrow();
     const palette = ["ansi6", "ansi3", "ansi4", "ansi5", "ansi2", "ansi1"];
     const sp = spaces();
+    this.attention = attentionBySpace(sp, agents(), terminals());
     const ids = new Set(sp.map(p => p.id));
     const kept = Object.fromEntries(Object.entries(shared("space.colors") ?? {}).filter(([id]) => ids.has(id)));
     let changed = Object.keys(kept).length !== Object.keys(shared("space.colors") ?? {}).length;
