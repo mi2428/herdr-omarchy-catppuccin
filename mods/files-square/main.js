@@ -30,7 +30,7 @@ const fileIcon = (name) => {
 };
 const PER_FOLDER = 500, TOTAL = 5000;
 const VIEWERS = {
-  nvim: ["nvim", "-R", "--"],
+  nvim: ["nvim", "--"],
   bat: ["bat", "--paging=always", "--"],
   less: ["less", "-R", "--"],
 };
@@ -84,6 +84,7 @@ export default class Files extends View {
   init(config, cx) {
     this.viewer = config?.terminal ?? props()?.terminal;
     if (this.viewer) {
+      this.viewerMode = config?.fileViewer ?? props()?.fileViewer;
       const overlay = config?.overlay ?? props()?.overlay;
       cx.timer.every(1000, () => {
         if (!terminals().some(t => t.address === this.viewer && t.state === "live")) closeOverlay(overlay);
@@ -99,7 +100,7 @@ export default class Files extends View {
   }
 
   close() {
-    if (this.viewer && terminals().some(t => t.address === this.viewer && t.state === "live")) run("terminal.kill", { terminal: this.viewer });
+    if (this.viewer && terminals().some(t => t.address === this.viewer && t.state === "live")) run(this.viewerMode === "nvim" ? "terminal.keep" : "terminal.kill", { terminal: this.viewer });
   }
 
   watch(root, cx) {
@@ -204,7 +205,7 @@ export default class Files extends View {
         if (!terminal) throw new Error("No terminal address returned");
         try {
           openOverlay({ kind: "dialog", frame: "none", width: 0.8, height: 0.8, layout: { type: "column", background: "#1e1e2eeb", radius: 0, children: [
-            { type: "block", size: { px: 0 }, content: { mod: "files-square", props: { terminal } } },
+            { type: "block", size: { px: 0 }, content: { mod: "files-square", props: { terminal, fileViewer: this.fileViewer } } },
             { type: "block", content: { terminal } },
           ] } });
         } catch (e) {
