@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 
 const source = readFileSync(new URL("../mods/git-graph/history.js", import.meta.url), "utf8");
-const { parseHistory, graphRows } = await import(`data:text/javascript,${encodeURIComponent(source)}`);
+const { parseHistory, graphRows, worktreeRows, countChanges, relativeTime } = await import(`data:text/javascript,${encodeURIComponent(source)}`);
 const [merge, branch, trunk, base] = "abcd".split("").map(c => c.repeat(40));
 const text = [
   `${merge}\x1f${trunk} ${branch}\x1f1795270868\x1fHEAD -> refs/heads/main, refs/remotes/origin/main, tag: refs/tags/v1\x1fMerge branch`,
@@ -23,7 +23,59 @@ assert.equal(columns, 2);
 assert.deepEqual(rows.map(row => row.col), [0, 1, 0, 1]);
 assert.ok(rows[0].links.some(([a, , b]) => a === 0 && b === 1));
 assert.ok(rows[2].links.some(([a, , b]) => a === 0 && b === 1));
+const working = worktreeRows(rows, 2);
+assert.equal(working[0].title, "Uncommitted changes (2)");
+assert.equal(working[0].worktreeLink, true);
+assert.equal(working[1].worktreeTarget, true);
+assert.equal(working[2].worktreeLink, false);
+assert.strictEqual(worktreeRows(rows, 0), rows);
+assert.equal(worktreeRows([], 1)[0].worktreeLink, false);
+assert.deepEqual(worktreeRows([{ ...rows[1], refs: [] }, rows[0]], 1).map(r => Boolean(r.worktreeLink)), [true, true, true]);
+assert.equal(countChanges(" M changed\0?? untracked\0R  new\0old\0"), 3);
+assert.equal(countChanges(""), 0);
+assert.throws(() => countChanges("R  new\0"), /Unexpected git status output/);
+const now = 1_800_000_000_000;
+for (const [age, expected] of [[0, "now"], [60, "1m"], [3600, "1h"], [86400, "1d"], [2592000, "1mo"], [31536000, "1y"]])
+  assert.equal(relativeTime(now / 1000 - age, now), expected);
 assert.throws(() => parseHistory("\x1einvalid\x1f\x1f0\x1f\x1fTitle"), /Unexpected git log output/);
+
+const graphSource = readFileSync(new URL("../mods/git-graph/main.js", import.meta.url), "utf8")
+  .replace(/^import .*$/gm, "").replace("export default class GitGraph", "class GitGraph");
+const calls = [];
+let hasHead = true, statusText = " M a\0?? b\0";
+const Graph = runInNewContext(`${graphSource}\nGitGraph`, {
+  View: class {}, spaces: () => [{ active: true, folder: "/repo" }],
+  focused: () => ({ pane: null, cwd: "/repo", terminal: null }), panes: () => [],
+  exec: async (_program, args) => {
+    calls.push(Array.from(args));
+    if (args.includes("--show-toplevel")) return { code: 0, stdout: "/repo\n" };
+    if (args.includes("--verify")) return hasHead ? { code: 0, stdout: merge } : { code: 1, stderr: "No HEAD" };
+    if (args.includes("symbolic-ref")) return { code: 0, stdout: "refs/heads/main" };
+    if (args.includes("log")) return { code: 0, stdout: text };
+    if (args.includes("status")) return { code: 0, stdout: statusText };
+    throw Error("Unexpected git command");
+  }, parseHistory, graphRows, worktreeRows, countChanges, relativeTime,
+});
+const graph = new Graph();
+graph.limit = 200;
+let pending;
+graph.refresh({ spawn: fn => { pending = fn({ notify() {} }); } });
+await pending;
+assert.equal(graph.rows[0].title, "Uncommitted changes (2)");
+assert.equal(graph.columns, columns + 1);
+assert.ok(calls.find(args => args.includes("status")).includes("--renames"));
+statusText = "";
+graph.refresh({ spawn: fn => { pending = fn({ notify() {} }); } });
+await pending;
+assert.equal(graph.rows.length, rows.length);
+assert.equal(graph.columns, columns);
+hasHead = false; statusText = "?? first.txt\0"; calls.length = 0;
+graph.refresh({ spawn: fn => { pending = fn({ notify() {} }); } });
+await pending;
+assert.equal(graph.rows.length, 1);
+assert.equal(graph.rows[0].title, "Uncommitted changes (1)");
+assert.equal(graph.rows[0].worktreeLink, false);
+assert.equal(calls.some(args => args.includes("log")), false);
 
 const layout = JSON.parse(readFileSync(new URL("../layouts/omarchy-catppuccin.json", import.meta.url), "utf8"));
 const find = (node, id) => node.id === id ? node : node.children?.map(child => find(child, id)).find(Boolean);

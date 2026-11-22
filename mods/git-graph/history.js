@@ -44,3 +44,34 @@ export function graphRows(commits) {
   }
   return { rows, columns };
 }
+
+export function worktreeRows(rows, count) {
+  if (!count) return rows;
+  const head = rows.findIndex(row => row.refs.some(ref => ref.kind === "head"));
+  return [
+    { hash: "worktree", title: `Uncommitted changes (${count})`, worktree: true, worktreeLink: rows.length > 0, refs: [], links: [], col: 0 },
+    ...rows.map((row, i) => ({ ...row, worktreeLink: head < 0 || i <= head, worktreeTarget: i === head })),
+  ];
+}
+
+export function countChanges(text) {
+  const entries = text.split("\0");
+  if (entries.pop() !== "") throw new Error("Unexpected git status output");
+  let count = 0;
+  for (let i = 0; i < entries.length; i++) {
+    if (entries[i][2] !== " ") throw new Error("Unexpected git status output");
+    count++;
+    if (/[RC]/.test(entries[i].slice(0, 2)) && !entries[++i]) throw new Error("Unexpected git status output");
+  }
+  return count;
+}
+
+export function relativeTime(seconds, now = Date.now()) {
+  const age = Math.max(0, Math.floor(now / 1000 - seconds));
+  if (age < 60) return "now";
+  if (age < 3600) return `${Math.floor(age / 60)}m`;
+  if (age < 86400) return `${Math.floor(age / 3600)}h`;
+  if (age < 2592000) return `${Math.floor(age / 86400)}d`;
+  if (age < 31536000) return `${Math.floor(age / 2592000)}mo`;
+  return `${Math.floor(age / 31536000)}y`;
+}
