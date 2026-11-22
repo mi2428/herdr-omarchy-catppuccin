@@ -48,9 +48,10 @@ export function graphRows(commits) {
 export function worktreeRows(rows, count) {
   if (!count) return rows;
   const head = rows.findIndex(row => row.refs.some(ref => ref.kind === "head"));
+  const col = head < 0 ? 0 : rows[head].col;
   return [
-    { hash: "worktree", title: `Uncommitted changes (${count})`, worktree: true, worktreeLink: rows.length > 0, refs: [], links: [], col: 0 },
-    ...rows.map((row, i) => ({ ...row, worktreeLink: head < 0 || i <= head, worktreeTarget: i === head })),
+    { hash: "worktree", title: `Uncommitted changes (${count})`, worktree: true, worktreeLink: rows.length > 0, refs: [], links: [], col },
+    ...rows.map((row, i) => ({ ...row, worktreeLink: head < 0 || i <= head, worktreeCol: col, worktreeTarget: i === head })),
   ];
 }
 

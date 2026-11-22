@@ -18,6 +18,7 @@ export default class GitGraph extends View {
     this.rows = []; this.columns = 1; this.limit = 200;
     this.refresh(cx);
     cx.timer.every(10000, cx => this.refresh(cx));
+    cx.timer.every(60000, cx => cx.notify());
   }
 
   refresh(cx) {
@@ -48,7 +49,7 @@ export default class GitGraph extends View {
         const count = countChanges(status.stdout);
         const graph = graphRows(commits.slice(0, this.limit));
         this.rows = worktreeRows(graph.rows, count);
-        this.columns = graph.columns + Number(count > 0);
+        this.columns = graph.columns;
         this.error = null;
       } catch (e) { if (context === JSON.stringify(location())) { this.rows = []; this.error = String(e); } }
       finally { this.loading = false; cx.notify(); }
@@ -56,22 +57,22 @@ export default class GitGraph extends View {
   }
 
   lines(row, t) {
-    const height = rowHeight(row), dot = row.refs.length ? ROW / 2 + 1 : height / 2;
-    const x = col => 9 + (this.rows[0]?.worktree ? STEP : 0) + col * STEP;
+    const height = rowHeight(row), dot = row.refs.length ? height - ROW / 2 + 1 : height / 2;
+    const x = col => 9 + col * STEP;
     const y = fraction => fraction === 0.5 ? dot : fraction * height;
     return div().relative().w(Math.min(this.columns * STEP + 10, 150)).h(height).flex_none().overflow_hidden()
-      .when(row.worktreeLink, el => {
-        const line = PathBuilder.stroke(1.6).dash_array([2, 3]).move_to(9, row.worktree ? dot : 0);
-        const path = row.worktreeTarget ? line.cubic_bezier_to(x(row.col), dot, 9, dot, x(row.col), dot) : line.line_to(9, height);
-        return el.child(window.paint_path(path.build(), t.muted).absolute().inset_0().size_full());
-      })
       .children(row.links.map(([from, top, to, bottom, color]) => {
         let path = PathBuilder.stroke(1.6).move_to(x(from), y(top));
+        const bend = Math.min(4, (y(bottom) - y(top)) / 5);
         path = from === to ? path.line_to(x(to), y(bottom))
-          : path.cubic_bezier_to(x(to), y(bottom), x(from), y(top) + 9, x(to), y(bottom) - 9);
+          : path.line_to(x(from), y(top) + bend).line_to(x(to), y(bottom) - bend).line_to(x(to), y(bottom));
         return window.paint_path(path.build(), t[COLORS[color % COLORS.length]]).absolute().inset_0().size_full();
       }))
-      .child(div().absolute().left((row.worktree ? 9 : x(row.col)) - 4).top(dot - 4).size(8).rounded_full()
+      .when(row.worktreeLink, el => el.child(window.paint_path(
+        PathBuilder.stroke(1.6).dash_array([2, 3]).move_to(x(row.worktreeCol ?? row.col), row.worktree ? dot : 0)
+          .line_to(x(row.worktreeCol ?? row.col), row.worktreeTarget ? dot : height).build(), t.muted,
+      ).absolute().inset_0().size_full()))
+      .child(div().absolute().left(x(row.col) - 4).top(dot - 4).size(8).rounded_full()
         .when(row.worktree, el => el.bg(t.chrome).border(2).border_color(t.muted))
         .when(!row.worktree, el => el.bg(t[COLORS[row.col % COLORS.length]])));
   }
@@ -81,7 +82,6 @@ export default class GitGraph extends View {
     return h_flex().h(rowHeight(row)).w_full().min_w(0).flex_none().px(7).gap(4).items_center()
       .child(this.lines(row, t))
       .child(v_flex().flex_1().min_w(0).overflow_hidden().gap(0)
-        .child(div().truncate().tooltip(row.title).text_color(row.worktree ? t.working : t.foreground).child(row.title || "(no message)"))
         .when(Boolean(row.refs.length), el => el.child(h_flex().gap(3).min_w(0)
           .children(labels.map(ref => {
             const color = ref.kind === "tag" ? t.ansi3 : ref.kind === "remote" ? t.ansi6 : ref.kind === "head" ? t.ansi4 : t.ansi5;
@@ -90,8 +90,10 @@ export default class GitGraph extends View {
               .child(ref.kind === "head" ? "✓" : ref.kind === "tag" ? "◆" : svg("mods/git-graph/branch.svg").size(10).flex_none())
               .child(div().min_w(0).truncate().text_size(10).child(ref.name));
           }))
-          .when(row.refs.length > 2, el => el.child(div().text_size(10).text_color(t.dim).child(`+${row.refs.length - 2}`))))))
-      .child(div().w(30).flex_none().text_right().text_size(10).text_color(t.dim).child(row.worktree ? "*" : relativeTime(row.seconds)));
+          .when(row.refs.length > 2, el => el.child(div().text_size(10).text_color(t.dim).child(`+${row.refs.length - 2}`)))))
+        .child(div().truncate().tooltip(row.title).text_color(row.worktree ? t.working : t.foreground).child(row.title || "(no message)")))
+      .child(div().w(30).flex_none().text_right().text_size(10).text_color(t.dim)
+        .when(Boolean(row.refs.length), el => el.pt(14)).child(row.worktree ? "*" : relativeTime(row.seconds)));
   }
 
   render(cx) {
