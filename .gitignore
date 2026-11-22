@@ -37,3 +37,6 @@ tags
 [._]*.un~
 
 # End of https://www.toptal.com/developers/gitignore/api/linux,vim
+
+# gpui-shell rewrites these from its installed runtime on every launch.
+gpui-kit.d.ts
