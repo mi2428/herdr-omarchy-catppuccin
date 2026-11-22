@@ -49,6 +49,14 @@ function title(tab, l) {
   const telling = live && live !== (l?.terminal ?? l?.address) && live !== prog && !path && !live.includes("@") && live.toLowerCase() !== l?.program?.key;
   return (tab.name === prog || !tab.named) && telling ? live : tab.name;
 }
+export function agentLine(a, pane, task) {
+  return {
+    place: a.space_name || pane?.cwd || a.address,
+    branch: pane?.branch ?? null,
+    task: /^\d+$/.test(task) ? a.program?.name || a.app || a.address : task,
+    id: a.address,
+  };
+}
 const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
 // A sub-agent without a pane isn't in agents(): its raw word, error counting as
 // blocked. It's never done: it reports to its parent, and the parent's done is the news.
@@ -184,12 +192,14 @@ export default class Agents extends View {
     const st = kidStatus(k, this.listed);
     const pic = icon(k.program, 14, t.foreground);
     const on = k.address === shown;
+    const pane = this.agentPanes.get(k.address);
+    const task = k.name || k.template || clean(k.title) || k.program?.name || k.address;
     return h_flex()
       .id(`sub-${k.address}`)
       .pl(8)
       .pr(8)
 
-      .h(26)
+      .h(42)
       .flex_none()
       .gap(0)
       .items_center()
@@ -201,7 +211,11 @@ export default class Agents extends View {
         .when(Boolean(l), el => el.border_l(1.5).border_color(t.input))
         .when(l === "└" || l === "├", el => el.border_b(1.5))))
       .when(Boolean(pic), el => el.child(div().mr(8).child(pic)))
-      .child(div().flex_1().truncate().text_color(on ? t.foreground : t.muted).child(k.name || k.template || k.program?.name || k.address))
+      .child(v_flex().flex_1().min_w(0)
+        .child(div().truncate().text_color(on ? t.foreground : t.muted).child(task))
+        .child(h_flex().min_w(0).gap(5).text_size(10.5).text_color(t.dim)
+          .when(Boolean(pane?.branch), el => el.child(div().truncate().child(pane.branch)))
+          .child(div().flex_none().child(k.address))))
       .child(this.status(t, { status: st }, compact));
   }
 
@@ -280,7 +294,9 @@ export default class Agents extends View {
     // agent's own title, never an automatic tab number unless two rows would
     // otherwise read the same.
     // Read the pane snapshot once: every host read copies the whole list into JS.
-    const leads = leadPanes(panes());
+    const allPanes = panes();
+    const leads = leadPanes(allPanes);
+    this.agentPanes = new Map(allPanes.filter(p => p.terminal).map(p => [p.terminal, p]));
     const tabs = new Map(spaces().flatMap(s => s.tabs).map(tab => [tab.id, tab]));
     const labels = new Map(list.map(a => {
       const tab = tabs.get(a.tab);
@@ -288,18 +304,10 @@ export default class Agents extends View {
       return [a.address, tab ? title(many ? { ...tab, named: false } : tab, many ? a : leads.get(a.tab)) : (a.title || a.program?.name || "")];
     }));
     const label = (a) => labels.get(a.address);
-    const detail = new Map(list.map(a => [a.address, /^\d+$/.test(label(a)) ? null : label(a)]));
-    const seen = {};
-    for (const a of list) { const k = `${a.space_name}\u0000${detail.get(a.address) ?? ""}`; seen[k] = (seen[k] ?? 0) + 1; }
-    for (const a of list) {
-      if (detail.get(a.address) == null && seen[`${a.space_name}\u0000`] > 1) detail.set(a.address, label(a));
-    }
-
     const row = (a, i, subs = []) => {
       const pic = icon(a.program, 16, t.foreground);
-      const more = detail.get(a.address);
-      // An agent on another machine (`vps/t7`) says which.
-      const machine = a.address.includes("/") ? a.address.split("/")[0] : null;
+      const pane = this.agentPanes.get(a.address);
+      const line = agentLine(a, pane, label(a));
       if (collapsed) {
         return h_flex()
           .id(`ag-${a.address}`)
@@ -333,14 +341,11 @@ export default class Agents extends View {
           cx.notify();
         })
         .child(svg(`mods/workspace-chrome/${isPinned ? "pin-off" : "pin"}.svg`).size(13));
-      // Under a space header the space goes without saying; an automatic tab number says nothing.
-      // Without a space header above (priority, pinned) the row names its space.
-      const full = byPriority || isPinned;
-      const name = full ? a.space_name || label(a) : more ?? (/^\d+$/.test(label(a)) ? a.program?.name || label(a) : label(a));
+      const agentName = a.program?.name || a.app || "Agent";
       return h_flex()
         .id(`ag-${a.address}`)
         .px(8)
-        .h(30)
+        .h(48)
         .flex_none()
 
         .items_center()
@@ -360,10 +365,15 @@ export default class Agents extends View {
             this.folded.has(a.address) ? this.folded.delete(a.address) : this.folded.add(a.address);
             cx.notify();
           })).child(pic)))
-        .child(h_flex().flex_1().min_w(0).gap(5).items_center()
-          .child(div().min_w(0).max_w(full && more ? 120 : 200).truncate().text_color(idle ? t.muted : t.foreground).child(name))
-          .when(full && Boolean(more), el => el.child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(`\u00b7 ${more}`))))
-        .when(Boolean(machine), el => el.child(div().text_size(10).text_color(t.dim).child(machine)))
+        .child(v_flex().flex_1().min_w(0).gap(2)
+          .child(h_flex().min_w(0).gap(5).items_center()
+            .child(div().flex_1().min_w(0).truncate().text_color(idle ? t.muted : t.foreground).child(line.place))
+            .child(div().flex_none().text_size(10.5).text_color(t.muted).child(agentName)))
+          .child(h_flex().min_w(0).gap(5).text_size(11).text_color(t.dim)
+            .when(Boolean(line.branch), el => el.child(div().max_w(90).truncate().text_color(t.accent).child(line.branch)))
+            .when(Boolean(line.branch), el => el.child(div().flex_none().child("·")))
+            .child(div().flex_1().min_w(0).truncate().child(line.task))))
+        .child(div().flex_none().text_size(10).text_color(t.dim).child(line.id))
         .when(subs.length > 0, el => el.child(fold(a, subs)))
         .when(this.hovered === a.address, el => el.child(pin))
         .when(this.hovered !== a.address && Boolean(when), el => el.child(div().flex_none().text_size(11).text_color(t.dim).child(duration(now - when))))
