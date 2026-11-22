@@ -196,10 +196,9 @@ export default class Agents extends View {
     const task = k.name || k.template || clean(k.title) || k.program?.name || k.address;
     return h_flex()
       .id(`sub-${k.address}`)
-      .pl(8)
-      .pr(8)
+      .px(5)
 
-      .h(42)
+      .h(36)
       .flex_none()
       .gap(0)
       .items_center()
@@ -210,13 +209,14 @@ export default class Agents extends View {
       .children(s.lines.map(l => div().self_start().mt(-4).w(9).h(17).mr(4).flex_none()
         .when(Boolean(l), el => el.border_l(1.5).border_color(t.input))
         .when(l === "└" || l === "├", el => el.border_b(1.5))))
-      .when(Boolean(pic), el => el.child(div().mr(8).child(pic)))
+      .when(Boolean(pic), el => el.child(div().mr(5).child(pic)))
       .child(v_flex().flex_1().min_w(0)
         .child(div().truncate().text_color(on ? t.foreground : t.muted).child(task))
         .child(h_flex().min_w(0).gap(5).text_size(10.5).text_color(t.dim)
-          .when(Boolean(pane?.branch), el => el.child(div().truncate().child(pane.branch)))
-          .child(div().flex_none().child(k.address))))
-      .child(this.status(t, { status: st }, compact));
+          .when(Boolean(pane?.branch), el => el.child(div().truncate().child(pane.branch)))))
+      .child(v_flex().flex_none().gap(2)
+        .child(h_flex().justify_end().child(this.status(t, { status: st }, compact)))
+        .child(div().text_size(10).text_color(t.dim).text_right().child(k.address)));
   }
 
   // compact: a ! for blocked where a header already says "Needs you".
@@ -344,12 +344,12 @@ export default class Agents extends View {
       const agentName = a.program?.name || a.app || "Agent";
       return h_flex()
         .id(`ag-${a.address}`)
-        .px(8)
-        .h(48)
+        .px(5)
+        .h(38)
         .flex_none()
 
         .items_center()
-        .gap(9)
+        .gap(6)
         .when(a.focused, (el) => el.bg(t.selected))
         .cursor_pointer()
         .hover((s) => s.bg(t.hover))
@@ -365,19 +365,22 @@ export default class Agents extends View {
             this.folded.has(a.address) ? this.folded.delete(a.address) : this.folded.add(a.address);
             cx.notify();
           })).child(pic)))
-        .child(v_flex().flex_1().min_w(0).gap(2)
-          .child(h_flex().min_w(0).gap(5).items_center()
+        .child(v_flex().flex_1().min_w(0).gap(1)
+          .child(h_flex().min_w(0).gap(4).items_center()
             .child(div().flex_1().min_w(0).truncate().text_color(idle ? t.muted : t.foreground).child(line.place))
             .child(div().flex_none().text_size(10.5).text_color(t.muted).child(agentName)))
-          .child(h_flex().min_w(0).gap(5).text_size(11).text_color(t.dim)
-            .when(Boolean(line.branch), el => el.child(div().max_w(90).truncate().text_color(t.accent).child(line.branch)))
+          .child(h_flex().min_w(0).gap(4).text_size(11).text_color(t.dim)
+            .when(Boolean(line.branch), el => el.child(div().max_w(74).truncate().text_color(t.accent).child(line.branch)))
             .when(Boolean(line.branch), el => el.child(div().flex_none().child("·")))
             .child(div().flex_1().min_w(0).truncate().child(line.task))))
-        .child(div().flex_none().text_size(10).text_color(t.dim).child(line.id))
-        .when(subs.length > 0, el => el.child(fold(a, subs)))
-        .when(this.hovered === a.address, el => el.child(pin))
-        .when(this.hovered !== a.address && Boolean(when), el => el.child(div().flex_none().text_size(11).text_color(t.dim).child(duration(now - when))))
-        .child(this.status(t, a, byPriority && !isPinned));
+        .child(v_flex().flex_none().gap(2)
+          .child(h_flex().gap(3).justify_end()
+            .when(subs.length > 0, el => el.child(fold(a, subs)))
+            .child(this.status(t, a, byPriority && !isPinned)))
+          .child(h_flex().gap(4).justify_end().text_size(10).text_color(t.dim)
+            .child(line.id)
+            .when(this.hovered === a.address, el => el.child(pin))
+            .when(this.hovered !== a.address && Boolean(when), el => el.child(duration(now - when)))));
     };
 
     // Groups in list order: spaces (grouped) or priority sections. Agents of a
