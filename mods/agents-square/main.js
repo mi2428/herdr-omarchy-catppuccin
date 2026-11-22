@@ -49,12 +49,13 @@ function title(tab, l) {
   const telling = live && live !== (l?.terminal ?? l?.address) && live !== prog && !path && !live.includes("@") && live.toLowerCase() !== l?.program?.key;
   return (tab.name === prog || !tab.named) && telling ? live : tab.name;
 }
-const taskTitle = (task, cwd) => task?.replace(/^π\s*>\s*/, "") === cwd?.replace(/\/$/, "").split("/").pop() ? "No task title" : task;
+const taskTitle = (task, cwd, program) => !task || task === program || /^\d+$/.test(task) ||
+  task.replace(/^π\s*>\s*/, "") === cwd?.replace(/\/$/, "").split("/").pop() ? "No task title" : task;
 export function agentLine(a, pane, task) {
   return {
     place: a.space_name || pane?.cwd || a.address,
     branch: pane?.branch ?? null,
-    task: taskTitle(/^\d+$/.test(task) ? a.program?.name || a.app || a.address : task, pane?.cwd),
+    task: taskTitle(task, pane?.cwd, a.program?.name || a.app),
     id: a.address,
   };
 }
@@ -195,7 +196,7 @@ export default class Agents extends View {
     const pic = icon(k.program, 14, t.foreground);
     const on = k.address === shown;
     const pane = this.agentPanes.get(k.address);
-    const task = taskTitle(k.name || k.template || clean(k.title) || k.program?.name || k.address, pane?.cwd);
+    const task = taskTitle(k.name || k.template || clean(k.title), pane?.cwd, k.program?.name);
     return h_flex()
       .id(`sub-${k.address}`)
       .px(5)
@@ -214,7 +215,7 @@ export default class Agents extends View {
       .when(Boolean(pic), el => el.child(div().mr(5).child(pic)))
       .child(v_flex().flex_1().min_w(0).gap(1)
         .child(h_flex().h(14).min_w(0).items_center().gap(4)
-          .child(div().flex_1().min_w(0).truncate().text_color(on ? t.foreground : t.muted).child(k.program?.name || "Agent"))
+          .child(div().flex_1().min_w(0).truncate().text_color(on ? t.foreground : t.muted).child(pane?.cwd?.split("/").pop() || k.parent || "Sub-agent"))
           .child(this.status(t, { status: st }, compact)))
         .child(h_flex().h(14).min_w(0).text_size(10.5).text_color(t.accent)
           .when(Boolean(pane?.branch), el => el.child(div().flex_1().min_w(0).truncate().child(pane.branch))))
@@ -345,7 +346,6 @@ export default class Agents extends View {
           cx.notify();
         })
         .child(svg(`mods/workspace-chrome/${isPinned ? "pin-off" : "pin"}.svg`).size(13));
-      const agentName = a.program?.name || a.app || "Agent";
       return h_flex()
         .id(`ag-${a.address}`)
         .px(5)
@@ -376,7 +376,6 @@ export default class Agents extends View {
             .child(this.status(t, a, byPriority && !isPinned)))
           .child(h_flex().h(14).min_w(0).gap(4).items_center().text_size(10.5)
             .when(Boolean(line.branch), el => el.child(div().flex_1().min_w(0).truncate().text_color(t.accent).child(line.branch)))
-            .child(div().flex_none().text_color(t.muted).child(agentName))
             .when(this.hovered !== a.address && Boolean(when), el => el.child(div().flex_none().text_color(t.dim).child(duration(now - when)))))
           .child(h_flex().h(14).min_w(0).gap(4).items_center().text_size(11).text_color(t.dim)
             .child(div().flex_1().min_w(0).truncate().child(line.task))
