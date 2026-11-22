@@ -2,6 +2,8 @@
 
 A Catppuccin Mocha layout for Herdr app designed to fit Omarchy's Hyprland desktop, with square panes, transparent gaps, and bundled mods.
 
+[![](./preview.png)](./preview.png)
+
 ## Getting Started
 
 Install Herdr app, then run the following from this repository's root:
