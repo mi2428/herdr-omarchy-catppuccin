@@ -7,9 +7,123 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
 import { spaces, machines, panes, agents, terminals, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
 
+/** @typedef {import("herdr").SpaceInfo} Space */
+/** @typedef {import("herdr").PaneInfo} Pane */
+/** @typedef {import("herdr").AgentInfo} Agent */
+/** @typedef {{address: string, parent?: string | null, state: string, status?: string | null, labels?: Record<string, string> | null}} LiveTerminal */
+/** @typedef {{blocked: number, review: number}} Attention */
+/** @typedef {{name: string, branch: string, ahead: number, behind: number, repo: string, linked: boolean}} GitInfo */
+/** @typedef {{name: string, target: string, state: string, why?: string, via?: boolean, session?: string, temporary?: boolean, keeps_running_after_logout?: boolean, version?: string}} Machine */
+/** @typedef {{machine: Machine, removed: boolean, busy?: boolean, error?: string | null}} Reconnect */
+/** @typedef {{w: Space, i: number, g: GitInfo | null, tree?: string | null}} SpaceRow */
+/** @typedef {Record<string, `#${string}`>} ThemeColors */
+/** @typedef {{id?: string, children?: unknown[], size?: {px?: number} | null}} LayoutNode */
+
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** @param {unknown} value @returns {value is Machine} */
+function isMachine(value) {
+  return isRecord(value) && typeof value.name === "string" && typeof value.target === "string" && typeof value.state === "string"
+    && (value.why === undefined || typeof value.why === "string") && (value.via === undefined || typeof value.via === "boolean")
+    && (value.session === undefined || typeof value.session === "string") && (value.temporary === undefined || typeof value.temporary === "boolean")
+    && (value.keeps_running_after_logout === undefined || typeof value.keeps_running_after_logout === "boolean")
+    && (value.version === undefined || typeof value.version === "string");
+}
+
+/** @param {unknown} value @returns {Machine[]} */
+function machineList(value) {
+  if (!isRecord(value) || !Array.isArray(value.machines)) throw new Error("Invalid machine list from hc.");
+  return value.machines.map((item) => {
+    if (!isMachine(item)) throw new Error("Invalid machine entry from hc.");
+    return item;
+  });
+}
+
+/** @param {string} value @returns {value is `#${string}`} */
+function isColor(value) {
+  return value.startsWith("#");
+}
+
+/** @param {string} value @param {string} name @returns {`#${string}`} */
+function themeColor(value, name) {
+  if (!isColor(value)) throw new Error(`Invalid theme color: ${name}`);
+  return value;
+}
+
+/** @returns {ThemeColors} */
+function themeColors() {
+  return Object.fromEntries(Object.entries(theme()).map(([name, value]) => [name, themeColor(value, name)]));
+}
+
+/** @param {unknown} value @returns {value is LiveTerminal} */
+function isLiveTerminal(value) {
+  return isRecord(value) && typeof value.address === "string" && typeof value.state === "string"
+    && (value.parent === undefined || value.parent === null || typeof value.parent === "string")
+    && (value.status === undefined || value.status === null || typeof value.status === "string")
+    && (value.labels === undefined || value.labels === null || (isRecord(value.labels) && Object.values(value.labels).every(label => typeof label === "string")));
+}
+
+/** @param {unknown[]} values @returns {LiveTerminal[]} */
+function liveTerminals(values) {
+  return values.map((value) => {
+    if (!isLiveTerminal(value)) throw new Error("Invalid terminal data from Herdr.");
+    return value;
+  });
+}
+
+/** @param {unknown} value @returns {Record<string, string>} */
+function spaceColors(value) {
+  if (value == null) return {};
+  if (!isRecord(value)) throw new Error("Invalid shared space colors.");
+  /** @type {Record<string, string>} */ const colors = {};
+  for (const [id, color] of Object.entries(value)) {
+    if (typeof color !== "string") throw new Error("Invalid shared space color.");
+    colors[id] = color;
+  }
+  return colors;
+}
+
+/** @param {unknown} value @returns {value is Reconnect} */
+function isReconnect(value) {
+  return isRecord(value) && isMachine(value.machine) && typeof value.removed === "boolean"
+    && (value.busy === undefined || typeof value.busy === "boolean")
+    && (value.error === undefined || value.error === null || typeof value.error === "string");
+}
+
+/** @param {unknown} value @returns {Record<string, Reconnect>} */
+function reconnectMap(value) {
+  if (!isRecord(value)) throw new Error("Invalid reconnect state.");
+  /** @type {Record<string, Reconnect>} */ const states = {};
+  for (const [name, state] of Object.entries(value)) {
+    if (!isReconnect(state)) throw new Error("Invalid reconnect state.");
+    states[name] = state;
+  }
+  return states;
+}
+
+/** @param {unknown} value @returns {Set<string | null>} */
+function foldedMachines(value) {
+  if (!Array.isArray(value) || !value.every(name => name === null || typeof name === "string")) throw new Error("Invalid folded machines.");
+  return new Set(value);
+}
+
+/** @param {unknown} value @returns {value is LayoutNode} */
+function isLayoutNode(value) {
+  return isRecord(value)
+    && (value.id === undefined || typeof value.id === "string")
+    && (value.children === undefined || Array.isArray(value.children))
+    && (value.size === undefined || value.size === null || (isRecord(value.size)
+      && (value.size.px === undefined || typeof value.size.px === "number")));
+}
+
+/** @param {unknown} node @param {string} id @returns {LayoutNode | null} */
 function find(node, id) {
-  if (node?.id === id) return node;
-  for (const child of node?.children ?? []) {
+  if (!isLayoutNode(node)) return null;
+  if (node.id === id) return node;
+  for (const child of node.children ?? []) {
     const found = find(child, id);
     if (found) return found;
   }
@@ -21,17 +135,22 @@ const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
 
 // Where a space is now: its first terminal's live folder, else where it was made.
 // `ps`: panes(), read once by the caller (each read copies every pane).
+/** @param {Space} s @param {Pane[]} ps */
 function place(s, ps) {
   const tabs = new Set((s.tabs ?? []).map((c) => c.id));
   return ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
 }
+/** @param {{tree?: string | null}} row */
 const rowHeight = ({ tree }) => (tree ? 28 : 30);
 const RAIL_CELL = 32;
 // A space's name and its git tail never shrink below this, so a short one ("api")
 // stays readable instead of turning into an ellipsis next to a long branch.
 const SIDE_MIN = 48;
+/** @param {import("gpui-kit").Element} el */
 const railCell = (el) => h_flex().flex_none().justify_center().child(el);
+/** @param {Space} s @param {Pane[]} ps */
 const where = (s, ps) => JSON.stringify([s.machine ?? null, place(s, ps)]);
+/** @param {string} path */
 const base = (path) => path.replace(/\/+$/, "").split("/").pop();
 // Changes made outside Herdr (an editor's save, a commit in another app): looked
 // for this often, in repos the list shows, while the window is in front.
@@ -42,36 +161,42 @@ const FALLBACK = 60000;
 const AT_ONCE = 6;
 
 // Both runs, finished: a place isn't done while one of its runs still holds a slot.
+/** @template A, B @param {Promise<A>} a @param {Promise<B>} b @returns {Promise<[A, B]>} */
 async function both(a, b) {
   const done = await Promise.allSettled([a, b]);
-  const failed = done.find((d) => d.status === "rejected");
-  if (failed) throw failed.reason;
-  return done.map((d) => d.value);
+  if (done[0].status === "rejected") throw done[0].reason;
+  if (done[1].status === "rejected") throw done[1].reason;
+  return [done[0].value, done[1].value];
 }
 
 // What a stored color name looks like on an avatar (the same in every mod
 // that draws space avatars): one strong color per hue, light and dark alike.
+/** @type {Record<string, `#${string}`>} */
 const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
 
 // A space speaks up only when something in it needs you.
+/** @param {string | null} status @returns {string} */
 export function glyph(status) {
   return status === "blocked" || status === "done" ? "●" : "·";
 }
 
+/** @param {ThemeColors} t @param {string | null} status @returns {`#${string}`} */
 export function tone(t, status) {
   return t[status] ?? t.unknown;
 }
 
+/** @param {Space[]} sp @param {Agent[]} listed @param {LiveTerminal[]} all @returns {Map<string, Attention>} */
 export function attentionBySpace(sp, listed, all) {
   const counts = new Map(sp.map(s => [s.id, { blocked: 0, review: 0 }]));
   const byAddress = new Map(listed.map(a => [a.address, a]));
   const live = new Map(all.filter(t => t.state === "live").map(t => [t.address, t]));
+  /** @param {LiveTerminal | undefined} t @returns {string | null} */
   const spaceOf = (t) => {
     const seen = new Set();
     while (t && !seen.has(t.address)) {
       seen.add(t.address);
       const id = byAddress.get(t.address)?.space ?? t.labels?.["herdr.space"];
-      if (counts.has(id)) return id;
+      if (id && counts.has(id)) return id;
       t = live.get(t.parent);
     }
     return null;
@@ -87,36 +212,40 @@ export function attentionBySpace(sp, listed, all) {
 }
 
 export default class Spaces extends View {
+  /** @param {unknown} _props @param {import("gpui-kit").AsyncContext} cx */
   init(_props, cx) {
-    this.git = {}; // where() -> { name, branch, ahead, behind, repo, linked }, null: not a repo
-    this.checked = {}; // where() -> when it was last looked at
-    this.unsure = new Set(); // where()s git couldn't answer for (a machine away)
-    this.pending = new Set(); // where()s to look at next
-    this.busy = {}; // pane -> an agent working or a program in front of its shell
-    this.ready = {}; // machine -> its layout was readable at the last look
-    this.at = {}; // space -> its where() at the last look
-    this.watching = new Map(); // local repos' pending folder watches
+    /** @type {Record<string, GitInfo | null>} */ this.git = {}; // where() -> { name, branch, ahead, behind, repo, linked }, null: not a repo
+    /** @type {Record<string, number>} */ this.checked = {}; // where() -> when it was last looked at
+    /** @type {Set<string>} */ this.unsure = new Set(); // where()s git couldn't answer for (a machine away)
+    /** @type {Set<string>} */ this.pending = new Set(); // where()s to look at next
+    /** @type {Record<string, boolean>} */ this.busy = {}; // pane -> an agent working or a program in front of its shell
+    /** @type {Record<string, boolean>} */ this.ready = {}; // machine -> its layout was readable at the last look
+    /** @type {Record<string, string>} */ this.at = {}; // space -> its where() at the last look
+    /** @type {Map<string, import("herdr").FolderWatch>} */ this.watching = new Map(); // local repos' pending folder watches
     // Spaces made while this runs wait (at most a moment) for their git, so a
     // worktree appears under its repo instead of jumping there.
     this.shown = new Set(spaces().map((s) => s.id));
-    this.born = {};
-    this.pressed = null;
-    this.over = null;
+    /** @type {Record<string, number>} */ this.born = {};
+    /** @type {string | null} */ this.pressed = null;
+    /** @type {string | null} */ this.over = null;
     this.scroll = ScrollHandle.new(); // the list's position: the active space is brought into view through it
-    this.activeAt = -1; // the active space's place among the list's children (headers and rows), -1 when not drawn
-    this.machines = [];
+    this.activeAt = -1;
+    /** @type {{key: string, at: number, machines: (string | null)[]} | null} */ this.ordering = null;
+    /** @type {string | undefined} */ this.revealed = undefined;
+    this.revealedAt = -1; // the active space's place among the list's children (headers and rows), -1 when not drawn
+    /** @type {Machine[]} */ this.machines = [];
     try {
-      this.reconnecting = JSON.parse(localStorage.getItem("machines.reconnecting") ?? "{}");
-      if (!this.reconnecting || typeof this.reconnecting !== "object" || Array.isArray(this.reconnecting)) this.reconnecting = {};
+      /** @type {Record<string, Reconnect>} */ this.reconnecting = reconnectMap(JSON.parse(localStorage.getItem("machines.reconnecting") ?? "{}"));
       for (const state of Object.values(this.reconnecting)) state.busy = false;
-    } catch { this.reconnecting = {}; }
-    try { this.folded = new Set(JSON.parse(localStorage.getItem("machines.folded") ?? "[]")); } catch { this.folded = new Set(); }
+    } catch { /** @type {Record<string, Reconnect>} */ this.reconnecting = {}; }
+    try { this.folded = foldedMachines(JSON.parse(localStorage.getItem("machines.folded") ?? "[]")); } catch { this.folded = new Set(); }
     this.refreshMachines(cx);
     cx.timer.every(15000, cx => this.refreshMachines(cx));
     // Refresh only when the refs could have changed (see `due`).
     cx.timer.every(250, (cx) => this.checkNew(cx));
   }
 
+  /** @param {import("gpui-kit").AsyncContext} cx */
   checkNew(cx) {
     const now = Date.now();
     const sp = spaces();
@@ -129,9 +258,10 @@ export default class Spaces extends View {
   // Places whose git could have changed: new ones (a new space, a cd), where a
   // command or an agent's turn just ended (a checkout, a commit, edits), those on
   // a machine that is back, and repos in view whose fallback is due.
+  /** @param {number} now @param {Space[]} sp @param {Pane[]} ps @returns {Set<string>} */
   due(now, sp, ps) {
     // Moved there: what it knew of that place may be old.
-    const at = {};
+    /** @type {Record<string, string>} */ const at = {};
     for (const s of sp) at[s.id] = where(s, ps);
     const keys = new Set(Object.values(at).filter((k) => JSON.parse(k)[1]));
     for (const k of Object.keys(this.git)) if (!keys.has(k)) {
@@ -147,9 +277,9 @@ export default class Spaces extends View {
     const due = new Set([...keys].filter((k) => !(k in this.git)));
     for (const [id, k] of Object.entries(at)) if (this.at[id] && this.at[id] !== k && keys.has(k)) due.add(k);
     this.at = at;
-    const spaceOf = {};
+    /** @type {Record<string, Space>} */ const spaceOf = {};
     for (const s of sp) for (const t of s.tabs ?? []) spaceOf[t.id] = s;
-    const busy = {};
+    /** @type {Record<string, boolean>} */ const busy = {};
     for (const p of ps) {
       if (!p.terminal || !spaceOf[p.tab]) continue;
       busy[p.pane] = p.status === "working" || !(p.program?.shell || p.program?.agent);
@@ -171,22 +301,26 @@ export default class Spaces extends View {
   }
 
   // `key` and the other places in its repo (a commit there moves their ahead/behind).
+  /** @param {string} key @param {Set<string>} keys @returns {string[]} */
   sameRepo(key, keys) {
     const repo = this.git[key]?.repo;
     return [key, ...(repo ? [...keys].filter((k) => this.git[k]?.repo === repo) : [])];
   }
 
+  /** @param {import("gpui-kit").AsyncContext} cx */
   refreshMachines(cx) {
     cx.spawn(async cx => {
-      try { const r = await hc(["machine", "ls", "--json"]); if (r.code === 0) this.machines = (JSON.parse(r.stdout).machines ?? []).filter((m) => !m.temporary); } catch {}
+      try { const r = await hc(["machine", "ls", "--json"]); if (r.code === 0) this.machines = machineList(JSON.parse(r.stdout)).filter((m) => !m.temporary); } catch {}
       cx.notify();
     });
   }
 
+  /** @param {Machine | undefined} machine @returns {boolean} */
   rebuilt(machine) {
     return machine?.state === "unreachable" && /^a different core answers there \("[^"]+"\)$/.test(machine.why ?? "");
   }
 
+  /** @param {Machine} machine @param {import("gpui-kit").AsyncContext} cx */
   reconnect(machine, cx) {
     const name = machine.name;
     if (this.reconnecting[name]?.busy) return;
@@ -197,7 +331,8 @@ export default class Spaces extends View {
     cx.notify();
     cx.spawn(async cx => {
       try {
-        const ask = async args => {
+        /** @param {string[]} args */
+        const ask = async (args) => {
           const r = await hc([...args, "--json"]);
           if (r.code !== 0) {
             let error;
@@ -221,7 +356,7 @@ export default class Spaces extends View {
         localStorage.setItem("machines.folded", JSON.stringify([...this.folded]));
         delete this.reconnecting[name];
       } catch (e) {
-        state.error = String(e.message ?? e);
+        state.error = e instanceof Error ? e.message : String(e);
         state.busy = false;
       }
       localStorage.setItem("machines.reconnecting", JSON.stringify(this.reconnecting));
@@ -231,6 +366,7 @@ export default class Spaces extends View {
   }
 
   // One look at a time, each place once however often it was asked for meanwhile.
+  /** @param {Iterable<string>} keys @param {import("gpui-kit").AsyncContext} cx */
   refreshGit(keys, cx) {
     for (const k of keys) this.pending.add(k);
     if (this.refreshing) return;
@@ -250,6 +386,7 @@ export default class Spaces extends View {
   }
 
   // One place's git: branch, ahead/behind, its repo.
+  /** @param {string} key @param {import("gpui-kit").AsyncContext} cx */
   async check(key, cx) {
     const [on, cwd] = JSON.parse(key);
     this.checked[key] = Date.now();
@@ -287,6 +424,7 @@ export default class Spaces extends View {
     }
   }
 
+  /** @param {string} repo @param {import("gpui-kit").AsyncContext} cx */
   watch(repo, cx) {
     if (this.watching.has(repo)) return;
     const pending = watchFolder(repo);
@@ -309,26 +447,31 @@ export default class Spaces extends View {
     });
   }
 
+  /** @param {Space} w */
   menu(w) {
     // A popup is as tall as its items; height is only the most.
     openOverlay({ mod: "menu-square", frame: "none", kind: "popup", width: 200, height: 260, props: { square: true, tab: "space", target: { id: w.id } } });
   }
 
+  /** @param {number} now @returns {boolean} */
   orderingDue(now) {
     return this.ordering && now - this.ordering.at >= 1000
       && this.ordering.machines.every(name => machines().some(m => m.name === name && m.layout === "ready"));
   }
 
   // Spaces in order, each worktree space moved under its main checkout's.
+/** @returns {SpaceRow[]} */
   ordered() {
     const sp = spaces(), ps = panes();
+    /** @param {Space} w */
     const ready = (w) => this.shown.has(w.id) || where(w, ps) in this.git || Date.now() - (this.born[w.id] ??= Date.now()) > 1500;
     for (const w of sp) if (!this.shown.has(w.id) && ready(w)) this.shown.add(w.id);
     const list = sp.map((w, i) => ({ w, i, g: this.git[where(w, ps)] ?? null }));
     const mains = new Set(list.filter((r) => r.g && !r.g.linked).map((r) => r.g.repo));
+    /** @param {SpaceRow} r */
     const nested = (r) => r.g?.linked && mains.has(r.g.repo);
-    const out = [];
-    const placed = new Set(); // repos whose worktrees are listed (under the first of its spaces)
+    /** @type {SpaceRow[]} */ const out = [];
+    /** @type {Set<string>} */ const placed = new Set(); // repos whose worktrees are listed (under the first of its spaces)
     for (const r of list) {
       if (nested(r)) continue;
       out.push({ ...r, tree: null });
@@ -345,7 +488,7 @@ export default class Spaces extends View {
     if (order.every((id, i) => id === target[i])) {
       this.ordering = null;
     } else if (this.ordering?.key !== key || this.orderingDue(Date.now())) {
-      const moved = new Set();
+      /** @type {Set<string | null>} */ const moved = new Set();
       this.ordering = { key, at: Date.now(), machines: [] };
       for (let i = 0; i < out.length; i++) {
         const from = order.indexOf(out[i].w.id);
@@ -360,20 +503,24 @@ export default class Spaces extends View {
   }
 
   // The rows, under a header per machine once one isn't this computer.
+  /** @param {ThemeColors} t @param {boolean} collapsed @returns {import("gpui-kit").Element[]} */
   grouped(t, collapsed) {
     const rows = this.ordered();
+    /** @param {SpaceRow} r @returns {import("gpui-kit").Element} */
     const draw = (r) => (collapsed ? this.compact(r, t) : this.row(r, t));
     // Where the active space's row lands among the children this returns: the list scrolls by its direct
     // children, and machine headers, login notes and loading rows count too.
     this.activeAt = -1;
     let before = 0;
     const remote = [...new Set([...rows.map(r => r.w.machine).filter(Boolean), ...this.machines.map(m => m.name), ...Object.keys(this.reconnecting)])].sort();
-    const loading = m => {
+    /** @param {string | null} m */
+    const loading = (m) => {
       const layout = machines().find(k => k.name === m)?.layout;
       return layout === "loading" || (!layout && this.machines.some(k => k.name === m && k.state === "connected"))
         || spaces().some(s => (s.machine ?? null) === m && !this.shown.has(s.id));
     };
-    const loadingRow = m => h_flex().id(`machine-loading-${m ?? "local"}`).h(28).flex_none().px(collapsed ? 0 : 8).items_center().when(collapsed, el => el.justify_center()).text_size(12).text_color(t.dim).child(collapsed ? "…" : "Loading…");
+    /** @param {string | null} m @returns {import("gpui-kit").Element} */
+    const loadingRow = (m) => h_flex().id(`machine-loading-${m ?? "local"}`).h(28).flex_none().px(collapsed ? 0 : 8).items_center().when(collapsed, el => el.justify_center()).text_size(12).text_color(t.dim).child(collapsed ? "…" : "Loading…");
     if (!remote.length) {
       if (loading(null) && !rows.length) return [loadingRow(null)];
       this.activeAt = rows.findIndex(r => r.w.active);
@@ -425,6 +572,7 @@ export default class Spaces extends View {
             .child(svg("mods/workspace-chrome/plus.svg").size(10))))
         .when(!collapsed, el => el.child(svg("mods/workspace-chrome/plus.svg").size(12)).child("New space there"));
       if (!collapsed && rebuilt) { before += 1; return [head]; }
+      /** @type {(el: import("gpui-kit").Element) => import("gpui-kit").Element} */
       const cell = collapsed ? railCell : (el) => el;
       const guidance = !collapsed && login ? [v_flex().px(8).pb(6).gap(3).flex_none()
         .child(div().text_size(11).text_color(t.blocked).child("needs a login: run"))
@@ -446,8 +594,10 @@ export default class Spaces extends View {
   // branch goes when the name already says it (a worktree is named after its branch),
   // and master/main go: nearly every space is on one. When the row is full, it
   // and the name both start from their text's width and give way in proportion.
+  /** @param {GitInfo} g @param {string | null} tree @param {string} name @param {ThemeColors} t */
   gitTail(g, tree, name, t) {
     const raw = g.branch ?? "detached";
+    /** @param {string} a */
     const same = (a) => a.toLowerCase() === name.toLowerCase();
     const branch = same(raw) || raw === "master" || raw === "main" ? "" : raw;
     const repo = tree || same(g.name) ? "" : g.name;
@@ -465,13 +615,14 @@ export default class Spaces extends View {
       .when(g.behind > 0, (el) => el.child(div().flex_none().text_color(t.ansi1).child(`\u2193${g.behind}`)));
   }
 
+  /** @param {SpaceRow} row @param {ThemeColors} t */
   row({ w, i, g, tree }, t) {
     const on = w.active;
     const attention = this.attention.get(w.id);
     const fromIndex = this.pressed === null ? -1 : spaces().findIndex(s => s.id === this.pressed);
-    const colors = shared("space.colors") ?? {};
+    const colors = spaceColors(shared("space.colors"));
     const color = colors[w.id] ?? "ansi6";
-    const fill = color.startsWith("#") ? color : (MARK[color] ?? t[color]);
+    const fill = color.startsWith("#") ? themeColor(color, "space color") : (MARK[color] ?? t[color]);
     return v_flex()
       .relative()
       .id(`space-${w.id}`)
@@ -504,8 +655,8 @@ export default class Spaces extends View {
       .on_mouse_up("left", (_e, cx) => {
         const from = this.pressed;
         const over = this.over;
-        this.pressed = null;
-        this.over = null;
+        /** @type {string | null} */ this.pressed = null;
+        /** @type {string | null} */ this.over = null;
         if (from !== null && over === w.id && from !== w.id) {
           const index = spaces().findIndex(s => s.id === w.id);
           if (index !== -1) run("space.move", { id: from, index: index + 1 });
@@ -528,6 +679,7 @@ export default class Spaces extends View {
       );
   }
 
+  /** @param {{w: Space, i: number}} row @param {ThemeColors} t */
   compact({ w, i }, t) {
     const attention = this.attention.get(w.id);
     return railCell(h_flex()
@@ -547,17 +699,19 @@ export default class Spaces extends View {
   }
 
   render() {
-    const t = theme();
+    const t = themeColors();
     const collapsed = narrow();
-    const palette = ["ansi6", "ansi3", "ansi4", "ansi5", "ansi2", "ansi1"];
+    /** @type {string[]} */ const palette = ["ansi6", "ansi3", "ansi4", "ansi5", "ansi2", "ansi1"];
     const sp = spaces();
-    this.attention = attentionBySpace(sp, agents(), terminals());
+    this.attention = attentionBySpace(sp, agents(), liveTerminals(terminals()));
     const ids = new Set(sp.map(p => p.id));
-    const kept = Object.fromEntries(Object.entries(shared("space.colors") ?? {}).filter(([id]) => ids.has(id)));
-    let changed = Object.keys(kept).length !== Object.keys(shared("space.colors") ?? {}).length;
+    const storedColors = spaceColors(shared("space.colors"));
+    const kept = Object.fromEntries(Object.entries(storedColors).filter(([id]) => ids.has(id)));
+    let changed = Object.keys(kept).length !== Object.keys(storedColors).length;
     for (const p of sp) {
       if (kept[p.id] || p.name === "~") continue;
-      const uses = c => Object.values(kept).filter(v => v === c).length;
+      /** @param {string} c */
+      const uses = (c) => Object.values(kept).filter((v) => v === c).length;
       kept[p.id] = palette.reduce((best, c) => uses(c) < uses(best) ? c : best);
       changed = true;
     }
