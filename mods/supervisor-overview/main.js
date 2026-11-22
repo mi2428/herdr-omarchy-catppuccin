@@ -1,5 +1,5 @@
 // Read-only worktree view of agents and explicitly marked supervisor workers.
-import { View, div } from "gpui-kit";
+import { View, div, image, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, run, theme, layout } from "herdr";
 
@@ -22,25 +22,36 @@ export default class SupervisorOverview extends View {
     const t = theme();
     const narrow = (layout()?.children?.[0]?.size?.px ?? 250) < 160;
     const rows = entries(terminals(), agents());
-    return v_flex().size_full().min_h(0).bg(t.chrome).text_size(12)
-      .child(h_flex().h(31).px(12).flex_none().items_center()
-        .child(div().font_medium().text_color(t.dim).child(narrow ? "W" : `Worktrees  ${rows.length}`)))
-      .child(v_flex().flex_1().min_h(0).overflow_y_scrollbar().mode("scrolling")
-        .when(!rows.length && !narrow, (el) => el.child(div().px(12).text_color(t.dim).child("No agents")))
+    const state = (status) => {
+      if (status === "working") return svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900);
+      if (status === "blocked") return div().px(6).h(18).flex_none().bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).flex().items_center().child("Needs you");
+      if (status === "idle") return div().size(7).mx(3).flex_none().border(1.5).border_color(t.idle ?? t.dim);
+      return div().size(7).mx(3).flex_none().bg(t[status] ?? t.dim);
+    };
+    return v_flex().size_full().min_h(0).bg(t.chrome).text_size(13)
+      .child(h_flex().h(31).pl(16).pr(10).flex_none().items_center().justify_between().text_size(11.5).text_color(t.dim)
+        .child("Worktrees")
+        .when(!narrow, (el) => el.child(div().text_size(11).child(String(rows.length)))))
+      .child(v_flex().flex_1().min_h(0).px(narrow ? 0 : 8).overflow_y_scrollbar().mode("scrolling")
+        .when(!rows.length && !narrow, (el) => el.child(div().px(12).text_size(12).text_color(t.dim).child("No agents yet")))
         .children(rows.map(({ terminal, agent, status, review: reviewState }) => {
           const cwd = terminal.cwd || "";
           const name = agent?.tab_name && !/^\d+$/.test(agent.tab_name) ? agent.tab_name : agent?.title || terminal.name || terminal.address;
-          return v_flex().id(`supervisor-${terminal.address}`).px(narrow ? 8 : 12).py(5).gap(2)
+          const program = agent?.program;
+          const icon = program?.icon ? program.tint ? svg(program.icon).size(16).flex_none().text_color(t.foreground) : image(program.icon).w(16).h(16).flex_none() : null;
+          return h_flex().id(`supervisor-${terminal.address}`).h(narrow ? 26 : 42).px(8).gap(9).flex_none().items_center()
+            .when(agent?.focused, (el) => el.bg(t.selected))
             .cursor_pointer().hover((el) => el.bg(t.hover))
             .tooltip(`${cwd || "Unknown folder"} · ${terminal.address}`)
             .on_click(() => agent?.pane ? run("pane.focus", { pane: agent.pane }) : run("terminal.peek", { terminal: terminal.address }))
-            .child(h_flex().gap(6).items_center()
-              .child(div().flex_none().text_color(t[status] ?? t.dim).child("●"))
-              .when(!narrow, (el) => el.child(div().truncate().text_color(t.foreground).child(folder(cwd)))
-                .when(terminal.labels?.["herdr.supervised"] === "1", (el) => el.child(div().flex_none().text_color(t.dim).child("S")))))
-            .when(!narrow, (el) => el.child(h_flex().gap(5).pl(13)
-              .child(div().min_w(0).flex_1().truncate().text_color(t.dim).child(name))
-              .when(Boolean(reviewState), (item) => item.child(div().flex_none().text_color(reviewState === "Review" ? t.blocked : t.dim).child(reviewState)))));
+            .when(Boolean(icon), (el) => el.child(icon))
+            .when(!narrow, (el) => el.child(v_flex().flex_1().min_w(0).gap(2)
+              .child(div().truncate().text_color(agent?.status === "idle" && !agent.focused ? t.muted : t.foreground).child(folder(cwd)))
+              .child(h_flex().min_w(0).gap(5).text_size(11).text_color(t.dim)
+                .child(div().min_w(0).flex_1().truncate().child(name))
+                .when(terminal.labels?.["herdr.supervised"] === "1", (el) => el.child(div().flex_none().text_color(t.accent).child("S")))
+                .when(Boolean(reviewState), (el) => el.child(div().flex_none().text_color(reviewState === "Review" ? t.blocked : t.dim).child(reviewState))))))
+            .child(state(status));
         })));
   }
 }
