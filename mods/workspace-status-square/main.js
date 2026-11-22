@@ -1,8 +1,9 @@
 import { View, div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, agents, theme, run, window, keys, exec, checking } from "herdr";
+import { spaces, agents, theme, run, window, keys, exec, checking, props } from "herdr";
 
 const WINDOWS = ["session", "weekly"];
+const USAGE_PROVIDERS = ["codex", "claude", "go", "zen"];
 const validTime = (time, now) => {
   const age = now - Date.parse(time);
   return Number.isFinite(age) && age >= -60000 && age < 300000;
@@ -33,9 +34,12 @@ function quotaSnapshot(snapshot, now = Date.now()) {
 }
 
 export default class WorkspaceStatus extends View {
-  init(_props, cx) {
+  init(config, cx) {
+    this.usageProviders = config?.usageProviders ?? props()?.usageProviders ?? ["codex"];
+    if (!Array.isArray(this.usageProviders) || this.usageProviders.some(id => !USAGE_PROVIDERS.includes(id)) ||
+      new Set(this.usageProviders).size !== this.usageProviders.length) throw Error("Invalid usageProviders: expected unique codex, claude, go, zen values");
     this.usage = {};
-    if (!checking()) {
+    if (!checking() && this.usageProviders.length) {
       this.refresh(cx);
       cx.timer.every(60000, cx => this.refresh(cx));
     }
@@ -96,12 +100,12 @@ export default class WorkspaceStatus extends View {
       .child(h_flex().gap(6).items_center().child(div().size(6).bg(t.dim)).child(`${list.length} agents`)
         .when(needs > 0, el => el.child(div().text_color(t.blocked).child(`· ${needs} needs you`))))
       .child(div().flex_1())
-      .child(this.meter("codex", "Codex", t))
-      .child(this.meter("claude", "Claude", t))
-      .child(this.meter("opencodego", "Go", t))
-      .child(h_flex().gap(4).items_center().tooltip("OpenCode Zen prepaid balance (not a quota)")
+      .when(this.usageProviders.includes("codex"), el => el.child(this.meter("codex", "Codex", t)))
+      .when(this.usageProviders.includes("claude"), el => el.child(this.meter("claude", "Claude", t)))
+      .when(this.usageProviders.includes("go"), el => el.child(this.meter("opencodego", "Go", t)))
+      .when(this.usageProviders.includes("zen"), el => el.child(h_flex().gap(4).items_center().tooltip("OpenCode Zen prepaid balance (not a quota)")
         .child("Zen").child(div().text_color(this.usage.zen === undefined ? t.dim : t.muted)
-          .child(this.usage.zen === undefined ? "—" : `$${this.usage.zen.toFixed(2)}`)))
+          .child(this.usage.zen === undefined ? "—" : `$${this.usage.zen.toFixed(2)}`))))
       .child(div().id("palette").text_color(t.dim).on_click(() => run("app.palette")).child(this.hint(t)));
   }
 }

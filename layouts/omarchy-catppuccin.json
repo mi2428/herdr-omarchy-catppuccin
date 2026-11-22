@@ -219,7 +219,8 @@
             "px": 28
           },
           "content": {
-            "mod": "workspace-status-square"
+            "mod": "workspace-status-square",
+            "props": { "usageProviders": ["codex"] }
           },
           "border": {
             "width": 0,
