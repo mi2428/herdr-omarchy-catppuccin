@@ -4,7 +4,12 @@ import { spaces, panes, focused, exec, theme } from "herdr";
 import { parseHistory, graphRows, worktreeRows, countChanges, relativeTime } from "./history.js";
 
 const ROW = 22, STEP = 14, COLORS = ["ansi4", "ansi5", "ansi2", "ansi3", "ansi6", "ansi1"];
-const rowHeight = row => row.worktree ? 26 : row.refs.length ? 36 : ROW;
+const rowHeight = row => row.worktree ? 26 : ROW;
+const worktreeDots = (top, end, origin) => {
+  const first = origin + 5, dots = [];
+  for (let y = first + Math.max(0, Math.ceil((top - 1 - first) / 5)) * 5; y <= top + end; y += 5) dots.push(y - top);
+  return dots;
+};
 
 function location() {
   const space = spaces().find(s => s.active), f = focused();
@@ -49,6 +54,10 @@ export default class GitGraph extends View {
         const count = countChanges(status.stdout);
         const graph = graphRows(commits.slice(0, this.limit));
         this.rows = worktreeRows(graph.rows, count);
+        if (count) {
+          let y = 0;
+          for (const row of this.rows) { row.worktreeY = y; y += rowHeight(row); }
+        }
         this.columns = graph.columns;
         this.error = null;
       } catch (e) { if (context === JSON.stringify(location())) { this.rows = []; this.error = String(e); } }
@@ -57,7 +66,7 @@ export default class GitGraph extends View {
   }
 
   lines(row, t) {
-    const height = rowHeight(row), dot = row.refs.length ? height - ROW / 2 + 1 : height / 2;
+    const height = rowHeight(row), dot = height / 2;
     const x = col => 9 + col * STEP;
     const y = fraction => fraction === 0.5 ? dot : fraction * height;
     return div().relative().w(Math.min(this.columns * STEP + 10, 150)).h(height).flex_none().overflow_hidden()
@@ -68,10 +77,9 @@ export default class GitGraph extends View {
           : path.line_to(x(from), y(top) + bend).line_to(x(to), y(bottom) - bend).line_to(x(to), y(bottom));
         return window.paint_path(path.build(), t[COLORS[color % COLORS.length]]).absolute().inset_0().size_full();
       }))
-      .when(row.worktreeLink, el => el.child(window.paint_path(
-        PathBuilder.stroke(1.6).dash_array([2, 3]).move_to(x(row.worktreeCol ?? row.col), row.worktree ? dot : 0)
-          .line_to(x(row.worktreeCol ?? row.col), row.worktreeTarget ? dot : height).build(), t.muted,
-      ).absolute().inset_0().size_full()))
+      .when(row.worktreeLink, el => el.children(worktreeDots(row.worktreeY, row.worktreeTarget ? dot - 2 : height,
+        rowHeight(this.rows[0]) / 2).map(y => div().absolute().left(x(row.worktreeCol ?? row.col) - 1)
+        .top(y - 1).size(2).rounded_full().bg(t.muted))))
       .child(div().absolute().left(x(row.col) - 4).top(dot - 4).size(8).rounded_full()
         .when(row.worktree, el => el.bg(t.chrome).border(2).border_color(t.muted))
         .when(!row.worktree, el => el.bg(t[COLORS[row.col % COLORS.length]])));
@@ -81,19 +89,18 @@ export default class GitGraph extends View {
     const labels = row.refs.slice(0, 2);
     return h_flex().h(rowHeight(row)).w_full().min_w(0).flex_none().px(7).gap(4).items_center()
       .child(this.lines(row, t))
-      .child(v_flex().flex_1().min_w(0).overflow_hidden().gap(0)
-        .when(Boolean(row.refs.length), el => el.child(h_flex().gap(3).min_w(0)
-          .children(labels.map(ref => {
+      .child(h_flex().flex_1().min_w(0).overflow_hidden().gap(4).items_center()
+        .children(labels.map(ref => {
             const color = ref.kind === "tag" ? t.ansi3 : ref.kind === "remote" ? t.ansi6 : ref.kind === "head" ? t.ansi4 : t.ansi5;
             return h_flex().h(18).max_w(104).min_w(0).px(4).gap(3).items_center().rounded(4).border(1).border_color(color)
               .bg(ref.kind === "head" ? color : t.chrome).text_color(ref.kind === "head" ? t.accent_foreground : color)
               .child(ref.kind === "head" ? "✓" : ref.kind === "tag" ? "◆" : svg("mods/git-graph/branch.svg").size(10).flex_none())
               .child(div().min_w(0).truncate().text_size(10).child(ref.name));
-          }))
-          .when(row.refs.length > 2, el => el.child(div().text_size(10).text_color(t.dim).child(`+${row.refs.length - 2}`)))))
-        .child(div().truncate().tooltip(row.title).text_color(row.worktree ? t.working : t.foreground).child(row.title || "(no message)")))
+        }))
+        .when(row.refs.length > 2, el => el.child(div().text_size(10).text_color(t.dim).child(`+${row.refs.length - 2}`)))
+        .child(div().flex_1().min_w(0).truncate().tooltip(row.title).text_color(row.worktree ? t.muted : t.foreground).child(row.title || "(no message)")))
       .child(div().w(30).flex_none().text_right().text_size(10).text_color(t.dim)
-        .when(Boolean(row.refs.length), el => el.pt(14)).child(row.worktree ? "*" : relativeTime(row.seconds)));
+        .child(row.worktree ? "*" : relativeTime(row.seconds)));
   }
 
   render(cx) {
