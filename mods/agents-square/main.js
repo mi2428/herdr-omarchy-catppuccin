@@ -4,8 +4,52 @@ import { View, div, image, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, props, window, layout } from "herdr";
 
+/** @typedef {{id?: string, children?: unknown[], size?: {px?: number} | null}} LayoutNode */
+/** @typedef {import("herdr").AgentInfo} Agent */
+/** @typedef {{address: string, state: string, parent?: string | null, labels?: Record<string, unknown> | null, program?: Pick<import("herdr").Program, "name" | "icon" | "tint"> | null, status?: import("herdr").Status | "error" | null, name?: string, template?: string, title?: string}} Terminal */
+/** @typedef {{program?: import("herdr").Program | null, title?: string, terminal?: string | null, address?: string, app?: string | null, key?: string}} TitleSource */
+/** @typedef {{t: Terminal, lines: string[]}} TreeRow */
+/** @param {unknown} value @returns {value is Terminal} */
+function isTerminal(value) {
+  return isRecord(value) && typeof value.address === "string" && typeof value.state === "string"
+    && (value.parent === undefined || value.parent === null || typeof value.parent === "string")
+    && (value.labels === undefined || value.labels === null || isRecord(value.labels))
+    && (value.status === undefined || value.status === null || value.status === "error" || value.status === "working" || value.status === "blocked" || value.status === "done" || value.status === "idle")
+    && (value.name === undefined || typeof value.name === "string")
+    && (value.template === undefined || typeof value.template === "string")
+    && (value.title === undefined || typeof value.title === "string")
+    && (value.program === undefined || value.program === null || (isRecord(value.program)
+      && typeof value.program.name === "string"
+      && (value.program.icon === null || typeof value.program.icon === "string")
+      && typeof value.program.tint === "boolean"));
+}
+/** @typedef {{id: string, label: string, status: import("herdr").Status | null, members: Agent[]}} Group */
+/** @typedef {Record<string, import("gpui-kit").Color>} Theme */
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) { return typeof value === "object" && value !== null && !Array.isArray(value); }
+/** @param {string} value @returns {value is import("gpui-kit").Color} */
+function isColor(value) { return value.startsWith("#"); }
+
+/** @param {Record<string, string>} colors @returns {Theme} */
+function checkedTheme(colors) {
+  /** @type {Theme} */
+  const checked = Object.create(null);
+  for (const [name, value] of Object.entries(colors)) {
+    if (!isColor(value)) throw new Error("Invalid theme color: " + name);
+    checked[name] = value;
+  }
+  return checked;
+}
+
+/** @param {import("gpui-kit").Color} color @param {"00" | "26"} alpha @returns {import("gpui-kit").Color} */
+function withAlpha(color, alpha) { return `${color}${alpha}`; }
+
+/** @param {unknown} value @returns {value is LayoutNode} */
+function isLayoutNode(value) { return isRecord(value) && (value.id === undefined || typeof value.id === "string") && (value.children === undefined || Array.isArray(value.children)) && (value.size === undefined || value.size === null || (isRecord(value.size) && (value.size.px === undefined || typeof value.size.px === "number"))); }
+/** @param {unknown} node @param {string} id @returns {LayoutNode | null} */
 function find(node, id) {
-  if (node?.id === id) return node;
+  if (!isLayoutNode(node)) return null;
+  if (node.id === id) return node;
   for (const child of node?.children ?? []) {
     const found = find(child, id);
     if (found) return found;
@@ -28,8 +72,10 @@ function toggleSidebar() {
 // Drops what an agent puts before its title: a status glyph or spinner and the separator
 // after it ("✦  Working", "⠋ - Thinking"), and Codex's blinking "[ ! ] " / "[ . ] " mark.
 // Stops at an opening bracket or quote, so a title that starts with one ("[web] login") keeps it.
+/** @type {(s: string | null | undefined) => string} */
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}\p{Ps}\p{Pi}]+/u, "").replace(/^\[ [!.] \] /, "").trim();
 
+/** @param {import("herdr").PaneInfo[]} all @returns {Map<string, import("herdr").PaneInfo>} */
 function leadPanes(all) {
   const leads = new Map();
   for (const p of all) {
@@ -41,6 +87,7 @@ function leadPanes(all) {
   return leads;
 }
 
+/** @param {import("herdr").TabInfo} tab @param {TitleSource | undefined} l */
 function title(tab, l) {
   const prog = l?.program?.name;
   const live = clean(l?.title);
@@ -49,8 +96,10 @@ function title(tab, l) {
   const telling = live && live !== (l?.terminal ?? l?.address) && live !== prog && !path && !live.includes("@") && live.toLowerCase() !== l?.program?.key;
   return (tab.name === prog || !tab.named) && telling ? live : tab.name;
 }
+/** @type {(task: string | null | undefined, cwd: string | null | undefined, program: string | null | undefined) => string} */
 const taskTitle = (task, cwd, program) => !task || task === program || /^\d+$/.test(task) ||
   task.replace(/^π\s*>\s*/, "") === cwd?.replace(/\/$/, "").split("/").pop() ? "No task title" : task;
+/** @param {Agent} a @param {import("herdr").PaneInfo | undefined} pane @param {string | undefined} task */
 export function agentLine(a, pane, task) {
   return {
     place: a.space_name || pane?.cwd || a.address,
@@ -59,10 +108,12 @@ export function agentLine(a, pane, task) {
     id: a.address,
   };
 }
+/** @type {Record<import("herdr").Status, number>} */
 const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
 const ROW_HEIGHT = 42;
 // A sub-agent without a pane isn't in agents(): its raw word, error counting as
 // blocked. It's never done: it reports to its parent, and the parent's done is the news.
+/** @type {(k: Terminal, listed: Map<string, import("herdr").Status>) => import("herdr").Status | null} */
 const kidStatus = (k, listed) => {
   const s = listed.get(k.address) ?? k.status;
   return s === "error" ? "blocked" : s === "done" ? "idle" : s;
@@ -72,9 +123,12 @@ const SORTS = [
   { id: "grouped", label: "Grouped by space", icon: "layers" },
 ];
 const sortOf = () => SORTS.find((s) => s.id === shared("agents.sort")) ?? SORTS[0];
+/** @type {Record<number, string>} */
 const SECTION = { 4: "Needs you", 3: "Done", 2: "Working", 1: "Idle" };
+/** @type {Partial<Record<number, import("herdr").Status>>} */
 const SECTION_STATUS = { 4: "blocked", 3: "done", 2: "working" };
 
+/** @param {number} ms */
 function duration(ms) {
   const m = Math.floor(ms / 60000);
   if (m < 1) return "<1m";
@@ -84,12 +138,21 @@ function duration(ms) {
 }
 
 // The agent's icon from the app's program table: a one-color glyph or a picture.
+/** @param {Pick<import("herdr").Program, "icon" | "tint"> | null | undefined} p @param {number} size @param {import("gpui-kit").Color} color */
 function icon(p, size, color) {
   if (!p?.icon) return null;
   return p.tint ? svg(p.icon).size(size).flex_none().text_color(color) : image(p.icon).w(size).h(size).flex_none();
 }
 
 export default class Agents extends View {
+  /** @type {Set<string>} */ folded;
+  /** @type {Record<string, {s: string, at: number}>} */ changed;
+  /** @type {string[]} */ pendingPins;
+  /** @type {Set<string>} */ migratingPins;
+  /** @type {Map<string, import("herdr").Status>} */ listed;
+  /** @type {Map<string, import("herdr").PaneInfo>} */ agentPanes;
+  /** @type {string | null} */ hovered;
+  /** @param {import("gpui-shell").Props | undefined} _props @param {import("gpui-kit").AsyncContext} cx */
   init(_props, cx) {
     if (props()?.sortMenu) return;
     this.folded = new Set();
@@ -97,7 +160,7 @@ export default class Agents extends View {
     try { this.changed = JSON.parse(localStorage.getItem("changed") ?? "{}"); } catch { this.changed = {}; }
     if (!this.changed || typeof this.changed !== "object" || Array.isArray(this.changed)) this.changed = {};
     try { this.pendingPins = JSON.parse(localStorage.getItem("pins") ?? "[]"); } catch { this.pendingPins = []; }
-    if (!Array.isArray(this.pendingPins)) this.pendingPins = [];
+    if (!Array.isArray(this.pendingPins) || this.pendingPins.some((address) => typeof address !== "string")) this.pendingPins = [];
     if (!this.pendingPins.length) localStorage.removeItem("pins");
     this.migratingPins = new Set();
     cx.timer.every(30000, (cx) => cx.notify());
@@ -105,6 +168,7 @@ export default class Agents extends View {
 
   // Stamps agents whose state changed. Done and idle count as one: looking at a
   // finished agent turns done into idle, and looking isn't the agent doing anything.
+  /** @param {Agent[]} list @param {number} now */
   track(list, now) {
     let dirty = false;
     for (const a of list) {
@@ -122,6 +186,7 @@ export default class Agents extends View {
 
   // Keep offline pins until their terminal returns, and keep each pending until
   // core echoes the label so a failed write doesn't erase the old pin.
+  /** @param {Terminal[]} all */
   migratePins(all) {
     const listed = new Map(all.filter((t) => t.state === "live").map((t) => [t.address, t]));
     const pending = this.pendingPins.filter((address) => {
@@ -140,14 +205,17 @@ export default class Agents extends View {
     else localStorage.removeItem("pins");
   }
 
+  /** @param {Agent} a @returns {number} */
   since(a) {
     return this.changed[a.address]?.at ?? 0;
   }
 
+  /** @param {Agent} a @returns {number} */
   rank(a) {
     return RANK[a.status] ?? 0;
   }
 
+  /** @param {Theme} t @returns {import("gpui-kit").Element} */
   sortMenu(t) {
     const on = sortOf().id;
     return v_flex()
@@ -174,11 +242,13 @@ export default class Agents extends View {
         .when(s.id === on, (el) => el.child(svg("mods/workspace-chrome/check.svg").size(14).flex_none().text_color(t.foreground)))));
   }
 
+  /** @param {string} addr */
   peek(addr) {
     run("terminal.peek", { terminal: addr });
   }
 
   // Live sub-agents of `addr`, depth first, each with the tree lines in front of it.
+  /** @param {Terminal[]} all @param {string} addr @param {string[]} [lead] @returns {TreeRow[]} */
   tree(all, addr, lead = []) {
     const kids = all.filter((k) => k.parent === addr && k.state === "live");
     return kids.flatMap((k, i) => {
@@ -190,6 +260,7 @@ export default class Agents extends View {
     });
   }
 
+  /** @param {Theme} t @param {TreeRow} s @param {string | null | undefined} shown @param {boolean} compact @returns {import("gpui-kit").Element} */
   subRow(t, s, shown, compact) {
     const k = s.t;
     const st = kidStatus(k, this.listed);
@@ -226,24 +297,29 @@ export default class Agents extends View {
   }
 
   // compact: a ! for blocked where a header already says "Needs you".
+  /** @param {Theme} t @param {{status: import("herdr").Status | null}} a @param {boolean} [compact] @returns {import("gpui-kit").Element} */
   status(t, a, compact = false) {
-    const color = t[a.status] ?? t.dim;
+    const color = a.status ? t[a.status] ?? t.dim : t.dim;
     if (a.status === "working") return svg("mods/workspace-chrome/spinner.svg").size(12).mx(1).flex_none().text_color(t.working).spin(900);
-    if (a.status === "blocked" && compact) return div().size(14).flex_none().bg(t.blocked + "26").text_size(10.5).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!");
-    if (a.status === "blocked") return div().flex_none().px(6).h(18).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).flex().items_center().child("Needs you");
+    if (a.status === "blocked" && compact) return div().size(14).flex_none().bg(withAlpha(t.blocked, "26")).text_size(10.5).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!");
+    if (a.status === "blocked") return div().flex_none().px(6).h(18).bg(withAlpha(t.blocked, "26")).text_size(10.5).font_semibold().text_color(t.blocked).flex().items_center().child("Needs you");
     // Idle: a ring; done: a dot.
     if (a.status === "idle") return div().size(7).mx(3).flex_none().border(1.5).border_color(t.idle ?? t.dim);
-    return div().size(7).mx(3).flex_none().bg(a.status === "done" ? color : t.dim + "00");
+    return div().size(7).mx(3).flex_none().bg(a.status === "done" ? color : withAlpha(t.dim, "00"));
   }
 
+  /** @param {import("gpui-kit").Context} cx @returns {import("gpui-kit").Element} */
   render(cx) {
-    const t = theme();
+    const t = checkedTheme(theme());
     if (props()?.sortMenu) return this.sortMenu(t);
     const collapsed = narrow();
     const sort = sortOf();
     let list = agents();
     this.listed = new Map(list.map((a) => [a.address, a.status]));
-    const all = terminals();
+    const all = terminals().map((terminal) => {
+      if (!isTerminal(terminal)) throw new Error("Invalid terminal snapshot");
+      return terminal;
+    });
     this.migratePins(all);
     const shown = focused()?.agent;
     const now = Date.now();
@@ -256,13 +332,15 @@ export default class Agents extends View {
     for (const a of list) tabCounts.set(a.tab, (tabCounts.get(a.tab) ?? 0) + 1);
     const byPriority = sort.id === "priority";
     const urgency = new Map(list.map((a) => [a.address, Math.max(this.rank(a), ...this.tree(all, a.address).map((s) => RANK[kidStatus(s.t, this.listed)] ?? 0))]));
-    const rankOf = (a) => urgency.get(a.address);
+    /** @param {Agent} a @returns {number} */
+    const rankOf = (a) => urgency.get(a.address) ?? 0;
     if (byPriority) list = [...list].sort((x, y) => rankOf(y) - rankOf(x) || this.since(y) - this.since(x) || y.seq - x.seq);
     const pinned = list.filter((a) => a.pinned);
     const rest = list.filter((a) => !a.pinned);
     list = [...pinned, ...rest];
     setAgentOrder(list.map((a) => a.address));
 
+    /** @param {Agent} a @param {number} i @returns {import("gpui-kit").Element[]} */
     const withKids = (a, i) => {
       const subs = collapsed ? [] : this.tree(all, a.address);
       const r = row(a, i, subs);
@@ -271,6 +349,7 @@ export default class Agents extends View {
     };
 
     // The fold chevron; folded, the count too, colored by the most urgent one.
+    /** @param {Agent} a @param {TreeRow[]} subs @returns {import("gpui-kit").Element} */
     const fold = (a, subs) => {
       const sts = subs.map((s) => kidStatus(s.t, this.listed));
       const top = sts.reduce((m, s) => ((RANK[s] ?? 0) > (RANK[m] ?? 0) ? s : m), null);
@@ -302,6 +381,7 @@ export default class Agents extends View {
     // Read the pane snapshot once: every host read copies the whole list into JS.
     const allPanes = panes();
     const leads = leadPanes(allPanes);
+    /** @type {Map<string, import("herdr").PaneInfo>} */
     this.agentPanes = new Map(allPanes.filter(p => p.terminal).map(p => [p.terminal, p]));
     const tabs = new Map(spaces().flatMap(s => s.tabs).map(tab => [tab.id, tab]));
     const labels = new Map(list.map(a => {
@@ -309,7 +389,9 @@ export default class Agents extends View {
       const many = tabCounts.get(a.tab) > 1;
       return [a.address, tab ? title(many ? { ...tab, named: false } : tab, many ? a : leads.get(a.tab)) : (a.title || a.program?.name || "")];
     }));
+    /** @param {Agent} a @returns {string | undefined} */
     const label = (a) => labels.get(a.address);
+    /** @param {Agent} a @param {number} i @param {TreeRow[]} [subs] @returns {import("gpui-kit").Element} */
     const row = (a, i, subs = []) => {
       const pic = icon(a.program, 16, t.foreground);
       const pane = this.agentPanes.get(a.address);
@@ -388,6 +470,7 @@ export default class Agents extends View {
 
     // Groups in list order: spaces (grouped) or priority sections. Agents of a
     // space are next to each other in agents(), so neighbours make a group.
+    /** @type {Group[]} */
     const groups = pinned.length ? [{ id: "pinned", label: "Pinned", status: null, members: pinned }] : [];
     for (const a of rest) {
       const r = rankOf(a) || RANK.idle;
@@ -397,9 +480,10 @@ export default class Agents extends View {
     }
 
     // A group's header; it folds the group. Folded, it says how many and the most urgent state.
+    /** @param {Group} g @returns {import("gpui-kit").Element} */
     const header = (g) => {
       const open = !this.folded.has(g.id);
-      const top = g.members.reduce((m, a) => ((RANK[a.status] ?? 0) > (RANK[m] ?? 0) ? a.status : m), null);
+      const top = g.members.reduce((m, a) => ((RANK[a.status] ?? 0) > (RANK[m] ?? 0) ? a.status : m), /** @type {import("herdr").Status | null} */ (null));
       return h_flex()
         .id(g.id)
         .px(8)
