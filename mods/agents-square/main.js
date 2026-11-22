@@ -60,7 +60,7 @@ export function agentLine(a, pane, task) {
   };
 }
 const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
-const ROW_HEIGHT = 50;
+const ROW_HEIGHT = 46;
 // A sub-agent without a pane isn't in agents(): its raw word, error counting as
 // blocked. It's never done: it reports to its parent, and the parent's done is the news.
 const kidStatus = (k, listed) => {
@@ -401,8 +401,8 @@ export default class Agents extends View {
       return h_flex()
         .id(g.id)
         .px(8)
-        .pt(8)
-        .h(30)
+        .pt(4)
+        .h(26)
         .flex_none()
         .gap(6)
         .items_center()
