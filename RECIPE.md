@@ -1,6 +1,6 @@
 # Omarchy Catppuccin
 
-Built to feel at home on an Omarchy desktop running Hyprland with Catppuccin Mocha. Square corners, tight spacing, a transparent canvas, and Mocha-colored chrome let Herdr blend with Omarchy's tiled windows instead of looking like a separate rounded app. Spaces and agents stay visible beside the terminals, with Files and Git close at hand.
+A Catppuccin Mocha layout for Herdr app designed to fit Omarchy's Hyprland desktop, with square panes, transparent gaps, and bundled mods.
 
 ![Omarchy Catppuccin](preview.png)
 
