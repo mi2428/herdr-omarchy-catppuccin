@@ -3,14 +3,33 @@ import { h_flex, v_flex, v_virtual_list, Scrollbar } from "gpui-base";
 import { spaces, panes, focused, exec, theme } from "herdr";
 import { parseHistory, graphRows, worktreeRows, countChanges, relativeTime } from "./history.js";
 
+/** @typedef {Record<string, import("gpui-kit").Color>} Theme */
+/** @typedef {import("./history.js").GraphRow} GraphRow */
 const ROW = 22, STEP = 14, COLORS = ["ansi4", "ansi5", "ansi2", "ansi3", "ansi6", "ansi1"];
+/** @param {GraphRow} row @returns {number} */
 const rowHeight = row => row.worktree ? 26 : ROW;
+/** @param {number} top @param {number} end @param {number} origin @returns {number[]} */
 const worktreeDots = (top, end, origin) => {
   const first = origin + 5, dots = [];
   for (let y = first + Math.max(0, Math.ceil((top - 1 - first) / 5)) * 5; y <= top + end; y += 5) dots.push(y - top);
   return dots;
 };
 
+/** @param {unknown} value @returns {value is import("gpui-kit").Color} */
+function isColor(value) { return typeof value === "string" && value.startsWith("#"); }
+
+/** @param {Record<string, string>} colors @returns {Theme} */
+function checkedTheme(colors) {
+  /** @type {Theme} */
+  const checked = Object.create(null);
+  for (const [name, value] of Object.entries(colors)) {
+    if (!isColor(value)) throw new Error("Invalid theme color: " + name);
+    checked[name] = value;
+  }
+  return checked;
+}
+
+/** @returns {{cwd: string | null | undefined, on: string | null}} */
 function location() {
   const space = spaces().find(s => s.active), f = focused();
   const pane = f?.pane ? panes().find(p => p.pane === f.pane) : null;
@@ -19,6 +38,15 @@ function location() {
 }
 
 export default class GitGraph extends View {
+  /** @type {GraphRow[]} */ rows;
+  /** @type {number} */ columns;
+  /** @type {number} */ limit;
+  /** @type {boolean | undefined} */ loading;
+  /** @type {boolean | undefined} */ more;
+  /** @type {string | null | undefined} */ error;
+  /** @type {string | undefined} */ context;
+
+  /** @param {import("gpui-shell").Props | undefined} _props @param {import("gpui-kit").AsyncContext} cx */
   init(_props, cx) {
     this.rows = []; this.columns = 1; this.limit = 200;
     this.refresh(cx);
@@ -26,6 +54,7 @@ export default class GitGraph extends View {
     cx.timer.every(60000, cx => cx.notify());
   }
 
+  /** @param {import("gpui-kit").AsyncContext} cx */
   refresh(cx) {
     if (this.loading) return;
     const { cwd, on } = location(), context = JSON.stringify({ cwd, on });
@@ -44,7 +73,7 @@ export default class GitGraph extends View {
         }
         const result = head.code === 0
           ? await exec("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", "log", "--all", "HEAD", "--date-order", "--decorate=full", `--max-count=${this.limit + 1}`, "--format=%x1e%H%x1f%P%x1f%ct%x1f%D%x1f%s"], { cwd: root, on })
-          : { code: 0, stdout: "" };
+          : { code: 0, stdout: "", stderr: "" };
         if (result.code !== 0) throw new Error(result.stderr.trim() || "Cannot read Git history");
         const status = await exec("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", "status", "--porcelain=v1", "-z", "--renames", "--untracked-files=all"], { cwd: root, on });
         if (status.code !== 0) throw new Error(status.stderr.trim() || "Cannot read Git status");
@@ -65,9 +94,12 @@ export default class GitGraph extends View {
     });
   }
 
+  /** @param {GraphRow} row @param {Theme} t @returns {import("gpui-kit").Element} */
   lines(row, t) {
     const height = rowHeight(row), dot = height / 2;
+    /** @param {number} col @returns {number} */
     const x = col => 9 + col * STEP;
+    /** @param {number} fraction @returns {number} */
     const y = fraction => fraction === 0.5 ? dot : fraction * height;
     return div().relative().w(Math.min(this.columns * STEP + 10, 150)).h(height).flex_none().overflow_hidden()
       .children(row.links.map(([from, top, to, bottom, color]) => {
@@ -85,6 +117,7 @@ export default class GitGraph extends View {
         .when(!row.worktree, el => el.bg(t[COLORS[row.col % COLORS.length]])));
   }
 
+  /** @param {GraphRow} row @param {Theme} t @returns {import("gpui-kit").Element} */
   row(row, t) {
     const labels = row.refs.slice(0, 2);
     return h_flex().h(rowHeight(row)).w_full().min_w(0).flex_none().px(7).gap(4).items_center()
@@ -100,12 +133,13 @@ export default class GitGraph extends View {
         .when(row.refs.length > 2, el => el.child(div().text_size(10).text_color(t.dim).child(`+${row.refs.length - 2}`)))
         .child(div().flex_1().min_w(0).truncate().tooltip(row.title).text_color(row.worktree ? t.muted : t.foreground).child(row.title || "(no message)")))
       .child(div().w(30).flex_none().text_right().text_size(10).text_color(t.dim)
-        .child(row.worktree ? "*" : relativeTime(row.seconds)));
+        .child(row.worktree === true ? "*" : relativeTime(row.seconds)));
   }
 
+  /** @param {import("gpui-kit").Context} cx @returns {import("gpui-kit").Element} */
   render(cx) {
     if (JSON.stringify(location()) !== this.context) this.refresh(cx);
-    const t = theme();
+    const t = checkedTheme(theme());
     return v_flex().id("git-graph").size_full().min_h(0).overflow_hidden().bg(t.background).text_size(12)
       .child(h_flex().h(31).flex_none().pl(16).pr(10).items_center().text_size(11.5).text_color(t.dim)
         .child(div().child("Git Graph"))
@@ -117,7 +151,7 @@ export default class GitGraph extends View {
         .when(Boolean(this.error) || (!this.rows.length && !this.loading), el => el.child(div().p(10).text_color(t.dim).child(this.error || "No commits")))
         .when(!this.rows.length && this.loading, el => el.child(div().p(10).text_color(t.dim).child("Loading history…")))
         .when(Boolean(this.rows.length), el => el.child(v_virtual_list("git-graph-commits", this.rows.length + Number(Boolean(this.more)),
-          this.rows.map(rowHeight).concat(this.more ? [32] : []),
+          [...this.rows.map(rowHeight), ...(this.more ? [32] : [])],
           i => this.rows[i]?.hash ?? "more", (range, cx) => Array.from({ length: range.end - range.start }, (_, offset) => {
             const i = range.start + offset;
             return this.rows[i] ? this.row(this.rows[i], t) : div().id("graph-more").p(10).text_color(t.ansi4).cursor_pointer()

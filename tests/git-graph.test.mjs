@@ -48,7 +48,7 @@ const graphSource = readFileSync(new URL("../mods/git-graph/main.js", import.met
   .replace(/^import .*$/gm, "").replace("export default class GitGraph", "class GitGraph");
 const calls = [];
 let hasHead = true, statusText = " M a\0?? b\0";
-const { Graph, worktreeDots } = runInNewContext(`${graphSource}\n({ Graph: GitGraph, worktreeDots })`, {
+const { Graph, worktreeDots, checkedTheme } = runInNewContext(`${graphSource}\n({ Graph: GitGraph, worktreeDots, checkedTheme })`, {
   View: class {}, spaces: () => [{ active: true, folder: "/repo" }],
   focused: () => ({ pane: null, cwd: "/repo", terminal: null }), panes: () => [],
   exec: async (_program, args) => {
@@ -61,6 +61,8 @@ const { Graph, worktreeDots } = runInNewContext(`${graphSource}\n({ Graph: GitGr
     throw Error("Unexpected git command");
   }, parseHistory, graphRows, worktreeRows, countChanges, relativeTime,
 });
+assert.deepEqual({ ...checkedTheme({ background: "#112233", ansi4: "#445566" }) }, { background: "#112233", ansi4: "#445566" });
+assert.throws(() => checkedTheme({ background: null }), /Invalid theme color: background/);
 assert.deepEqual([...worktreeDots(0, 26, 13), ...worktreeDots(26, 9, 13).map(y => 26 + y)], [18, 23, 28, 33]);
 assert.deepEqual(Array.from(worktreeDots(28, 5, 13)), [0, 5]);
 const graph = new Graph();
