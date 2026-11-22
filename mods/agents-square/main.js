@@ -49,15 +49,17 @@ function title(tab, l) {
   const telling = live && live !== (l?.terminal ?? l?.address) && live !== prog && !path && !live.includes("@") && live.toLowerCase() !== l?.program?.key;
   return (tab.name === prog || !tab.named) && telling ? live : tab.name;
 }
+const taskTitle = (task, cwd) => task?.replace(/^π\s*>\s*/, "") === cwd?.replace(/\/$/, "").split("/").pop() ? "No task title" : task;
 export function agentLine(a, pane, task) {
   return {
     place: a.space_name || pane?.cwd || a.address,
     branch: pane?.branch ?? null,
-    task: /^\d+$/.test(task) ? a.program?.name || a.app || a.address : task,
+    task: taskTitle(/^\d+$/.test(task) ? a.program?.name || a.app || a.address : task, pane?.cwd),
     id: a.address,
   };
 }
 const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
+const ROW_HEIGHT = 50;
 // A sub-agent without a pane isn't in agents(): its raw word, error counting as
 // blocked. It's never done: it reports to its parent, and the parent's done is the news.
 const kidStatus = (k, listed) => {
@@ -193,12 +195,12 @@ export default class Agents extends View {
     const pic = icon(k.program, 14, t.foreground);
     const on = k.address === shown;
     const pane = this.agentPanes.get(k.address);
-    const task = k.name || k.template || clean(k.title) || k.program?.name || k.address;
+    const task = taskTitle(k.name || k.template || clean(k.title) || k.program?.name || k.address, pane?.cwd);
     return h_flex()
       .id(`sub-${k.address}`)
       .px(5)
 
-      .h(36)
+      .h(ROW_HEIGHT)
       .flex_none()
       .gap(0)
       .items_center()
@@ -210,13 +212,15 @@ export default class Agents extends View {
         .when(Boolean(l), el => el.border_l(1.5).border_color(t.input))
         .when(l === "└" || l === "├", el => el.border_b(1.5))))
       .when(Boolean(pic), el => el.child(div().mr(5).child(pic)))
-      .child(v_flex().flex_1().min_w(0)
-        .child(div().truncate().text_color(on ? t.foreground : t.muted).child(task))
-        .child(h_flex().min_w(0).gap(5).text_size(10.5).text_color(t.dim)
-          .when(Boolean(pane?.branch), el => el.child(div().truncate().child(pane.branch)))))
-      .child(v_flex().flex_none().gap(2)
-        .child(h_flex().justify_end().child(this.status(t, { status: st }, compact)))
-        .child(div().text_size(10).text_color(t.dim).text_right().child(k.address)));
+      .child(v_flex().flex_1().min_w(0).gap(1)
+        .child(h_flex().h(14).min_w(0).items_center().gap(4)
+          .child(div().flex_1().min_w(0).truncate().text_color(on ? t.foreground : t.muted).child(k.program?.name || "Agent"))
+          .child(this.status(t, { status: st }, compact)))
+        .child(h_flex().h(14).min_w(0).text_size(10.5).text_color(t.accent)
+          .when(Boolean(pane?.branch), el => el.child(div().flex_1().min_w(0).truncate().child(pane.branch))))
+        .child(h_flex().h(14).min_w(0).gap(5).text_size(11).text_color(t.dim)
+          .child(div().flex_1().min_w(0).truncate().child(task))
+          .child(div().flex_none().text_size(10).child(k.address))));
   }
 
   // compact: a ! for blocked where a header already says "Needs you".
@@ -345,7 +349,7 @@ export default class Agents extends View {
       return h_flex()
         .id(`ag-${a.address}`)
         .px(5)
-        .h(38)
+        .h(ROW_HEIGHT)
         .flex_none()
 
         .items_center()
@@ -366,21 +370,19 @@ export default class Agents extends View {
             cx.notify();
           })).child(pic)))
         .child(v_flex().flex_1().min_w(0).gap(1)
-          .child(h_flex().min_w(0).gap(4).items_center()
+          .child(h_flex().h(14).min_w(0).items_center().gap(4)
             .child(div().flex_1().min_w(0).truncate().text_color(idle ? t.muted : t.foreground).child(line.place))
-            .child(div().flex_none().text_size(10.5).text_color(t.muted).child(agentName)))
-          .child(h_flex().min_w(0).gap(4).text_size(11).text_color(t.dim)
-            .when(Boolean(line.branch), el => el.child(div().max_w(74).truncate().text_color(t.accent).child(line.branch)))
-            .when(Boolean(line.branch), el => el.child(div().flex_none().child("·")))
-            .child(div().flex_1().min_w(0).truncate().child(line.task))))
-        .child(v_flex().flex_none().gap(2)
-          .child(h_flex().gap(3).justify_end()
             .when(subs.length > 0, el => el.child(fold(a, subs)))
             .child(this.status(t, a, byPriority && !isPinned)))
-          .child(h_flex().gap(4).justify_end().text_size(10).text_color(t.dim)
-            .child(line.id)
+          .child(h_flex().h(14).min_w(0).gap(4).items_center().text_size(10.5)
+            .when(Boolean(line.branch), el => el.child(div().flex_1().min_w(0).truncate().text_color(t.accent).child(line.branch)))
+            .child(div().flex_none().text_color(t.muted).child(agentName))
+            .when(this.hovered !== a.address && Boolean(when), el => el.child(div().flex_none().text_color(t.dim).child(duration(now - when)))))
+          .child(h_flex().h(14).min_w(0).gap(4).items_center().text_size(11).text_color(t.dim)
+            .child(div().flex_1().min_w(0).truncate().child(line.task))
+            .child(div().flex_none().text_size(10).child(line.id))
             .when(this.hovered === a.address, el => el.child(pin))
-            .when(this.hovered !== a.address && Boolean(when), el => el.child(duration(now - when)))));
+          ));
     };
 
     // Groups in list order: spaces (grouped) or priority sections. Agents of a
