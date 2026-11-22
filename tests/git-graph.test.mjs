@@ -108,12 +108,20 @@ assert.equal(mocha.colors.canvas, "#00000000");
 const tabsSource = readFileSync(new URL("../mods/tabs-files/main.js", import.meta.url), "utf8")
   .replace(/^import .*$/gm, "").replace("export default class Tabs", "class Tabs");
 const actions = [], right = structuredClone(find(layout, "panel"));
-const { Tabs, panelMask } = runInNewContext(`${tabsSource}\n({ Tabs, panelMask })`, {
+let zoomValue = 1;
+const { Tabs, panelMask, trafficLights, zoom, checkedTheme: checkTabsTheme } = runInNewContext(`${tabsSource}\n({ Tabs, panelMask, trafficLights, zoom, checkedTheme })`, {
   View: class {}, run: (action, { id }) => {
     actions.push([action, id]);
     find(right, id).hidden = action === "layout.hide";
-  }, localStorage: { setItem() {} },
+  }, localStorage: { setItem() {} }, settings: () => ({ zoom: zoomValue }),
 });
+assert.deepEqual(Array.from(trafficLights({ traffic_lights: [10, 20] })), [10, 20]);
+assert.throws(() => trafficLights({ traffic_lights: [] }), /Invalid layout traffic lights/);
+assert.equal(zoom(), 1);
+zoomValue = 0;
+assert.throws(() => zoom(), /Invalid zoom setting/);
+assert.deepEqual({ ...checkTabsTheme({ chrome: "#112233" }) }, { chrome: "#112233" });
+assert.throws(() => checkTabsTheme({ chrome: null }), /Invalid theme color: chrome/);
 right.hidden = true;
 const tabs = new Tabs();
 tabs.panels = { previous: "git" };
