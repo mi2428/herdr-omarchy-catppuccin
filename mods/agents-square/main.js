@@ -6,13 +6,14 @@ import { agents, terminals, panes, focused, spaces, run, theme, shared, setShare
 
 /** @typedef {{id?: string, children?: unknown[], size?: {px?: number} | null}} LayoutNode */
 /** @typedef {import("herdr").AgentInfo} Agent */
-/** @typedef {{address: string, state: string, parent?: string | null, labels?: Record<string, unknown> | null, program?: Pick<import("herdr").Program, "name" | "icon" | "tint"> | null, status?: import("herdr").Status | "error" | null, name?: string, template?: string, title?: string}} Terminal */
+/** @typedef {{address: string, state: string, parent?: string | null, cwd?: string | null, labels?: Record<string, unknown> | null, program?: Pick<import("herdr").Program, "name" | "icon" | "tint"> | null, status?: import("herdr").Status | "error" | null, name?: string, template?: string, title?: string}} Terminal */
 /** @typedef {{program?: import("herdr").Program | null, title?: string, terminal?: string | null, address?: string, app?: string | null, key?: string}} TitleSource */
-/** @typedef {{t: Terminal, lines: string[]}} TreeRow */
+/** @typedef {{t: Terminal, depth: number, branch: string | null}} TreeRow */
 /** @param {unknown} value @returns {value is Terminal} */
 function isTerminal(value) {
   return isRecord(value) && typeof value.address === "string" && typeof value.state === "string"
     && (value.parent === undefined || value.parent === null || typeof value.parent === "string")
+    && (value.cwd === undefined || value.cwd === null || typeof value.cwd === "string")
     && (value.labels === undefined || value.labels === null || isRecord(value.labels))
     && (value.status === undefined || value.status === null || value.status === "error" || value.status === "working" || value.status === "blocked" || value.status === "done" || value.status === "idle")
     && (value.name === undefined || typeof value.name === "string")
@@ -247,15 +248,15 @@ export default class Agents extends View {
     run("terminal.peek", { terminal: addr });
   }
 
-  // Live sub-agents of `addr`, depth first, each with the tree lines in front of it.
-  /** @param {Terminal[]} all @param {string} addr @param {string[]} [lead] @returns {TreeRow[]} */
-  tree(all, addr, lead = []) {
+  // Live sub-agents, depth first. An unpaneled child inherits its checkout's branch.
+  /** @param {Terminal[]} all @param {string} addr @param {number} [depth] @param {import("herdr").PaneInfo | undefined} [ancestor] @returns {TreeRow[]} */
+  tree(all, addr, depth = 1, ancestor = this.agentPanes.get(addr)) {
     const kids = all.filter((k) => k.parent === addr && k.state === "live");
-    return kids.flatMap((k, i) => {
-      const last = i === kids.length - 1;
+    return kids.flatMap((k) => {
+      const pane = this.agentPanes.get(k.address);
       return [
-        { t: k, lines: [...lead, last ? "└" : "├"] },
-        ...this.tree(all, k.address, [...lead, last ? "" : "│"]),
+        { t: k, depth, branch: pane?.branch ?? (ancestor?.cwd === k.cwd ? ancestor.branch : null) },
+        ...this.tree(all, k.address, depth + 1, pane ?? ancestor),
       ];
     });
   }
@@ -267,11 +268,11 @@ export default class Agents extends View {
     const pic = icon(k.program, 14, t.foreground);
     const on = k.address === shown;
     const pane = this.agentPanes.get(k.address);
-    const task = taskTitle(k.name || k.template || clean(k.title), pane?.cwd, k.program?.name);
+    const task = taskTitle(k.name || k.template || clean(k.title), pane?.cwd ?? k.cwd, k.program?.name);
     return h_flex()
       .id(`sub-${k.address}`)
       .px(5)
-
+      .pl(5 + s.depth * 22)
       .h(ROW_HEIGHT)
       .mb(4)
       .flex_none()
@@ -281,16 +282,13 @@ export default class Agents extends View {
       .when(on, (el) => el.bg(t.raised))
       .hover((s) => s.bg(t.hover))
       .on_click(() => (this.listed.has(k.address) ? run("pane.focus", { terminal: k.address }) : this.peek(k.address)))
-      .children(s.lines.map(l => div().self_start().mt(-4).w(9).h(17).mr(4).flex_none()
-        .when(Boolean(l), el => el.border_l(1.5).border_color(t.input))
-        .when(l === "└" || l === "├", el => el.border_b(1.5))))
       .when(Boolean(pic), el => el.child(div().mr(5).child(pic)))
       .child(v_flex().flex_1().min_w(0).gap(0)
         .child(h_flex().h(13).min_w(0).items_center().gap(4)
-          .child(div().flex_1().min_w(0).truncate().text_color(on ? t.foreground : t.muted).child(pane?.cwd?.split("/").pop() || k.parent || "Sub-agent"))
+          .child(div().flex_1().min_w(0).truncate().text_color(on ? t.foreground : t.muted).child((pane?.cwd ?? k.cwd)?.split("/").pop() || k.parent || "Sub-agent"))
           .child(this.status(t, { status: st }, compact)))
         .child(h_flex().h(13).min_w(0).text_size(10.5).text_color(t.accent)
-          .when(Boolean(pane?.branch), el => el.child(div().flex_1().min_w(0).truncate().child(pane.branch))))
+          .when(Boolean(s.branch), el => el.child(div().flex_1().min_w(0).truncate().child(s.branch))))
         .child(h_flex().h(13).min_w(0).gap(5).text_size(11).text_color(t.dim)
           .child(div().flex_1().min_w(0).truncate().child(task))
           .child(div().flex_none().text_size(10).child(k.address))));
@@ -320,6 +318,8 @@ export default class Agents extends View {
       if (!isTerminal(terminal)) throw new Error("Invalid terminal snapshot");
       return terminal;
     });
+    const allPanes = panes();
+    this.agentPanes = new Map(allPanes.filter(p => p.terminal).map(p => [p.terminal, p]));
     this.migratePins(all);
     const shown = focused()?.agent;
     const now = Date.now();
@@ -365,7 +365,7 @@ export default class Agents extends View {
         .text_size(11)
         .text_color(open ? t.dim : (t[top] ?? t.dim))
         .cursor_pointer()
-        .hover((s) => s.bg(t.hover).text_color(t.foreground))
+        .hover((s) => s.text_color(t.foreground))
         .on_click((_e, cx) => {
           cx.stop_propagation();
           open ? this.folded.add(a.address) : this.folded.delete(a.address);
@@ -379,10 +379,7 @@ export default class Agents extends View {
     // agent's own title, never an automatic tab number unless two rows would
     // otherwise read the same.
     // Read the pane snapshot once: every host read copies the whole list into JS.
-    const allPanes = panes();
     const leads = leadPanes(allPanes);
-    /** @type {Map<string, import("herdr").PaneInfo>} */
-    this.agentPanes = new Map(allPanes.filter(p => p.terminal).map(p => [p.terminal, p]));
     const tabs = new Map(spaces().flatMap(s => s.tabs).map(tab => [tab.id, tab]));
     const labels = new Map(list.map(a => {
       const tab = tabs.get(a.tab);

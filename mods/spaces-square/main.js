@@ -141,7 +141,7 @@ function place(s, ps) {
   return ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
 }
 /** @param {{tree?: string | null}} row */
-const rowHeight = ({ tree }) => (tree ? 28 : 30);
+const rowHeight = ({ tree }) => (tree ? 22 : 30);
 const RAIL_CELL = 32;
 // A space's name and its git tail never shrink below this, so a short one ("api")
 // stays readable instead of turning into an ellipsis next to a long branch.
@@ -230,6 +230,7 @@ export default class Spaces extends View {
     /** @type {string | null} */ this.over = null;
     this.scroll = ScrollHandle.new(); // the list's position: the active space is brought into view through it
     this.activeAt = -1;
+    /** @type {Set<string>} */ this.foldedSpaces = new Set();
     /** @type {{key: string, at: number, machines: (string | null)[]} | null} */ this.ordering = null;
     /** @type {string | undefined} */ this.revealed = undefined;
     this.revealedAt = -1; // the active space's place among the list's children (headers and rows), -1 when not drawn
@@ -505,9 +506,15 @@ export default class Spaces extends View {
   // The rows, under a header per machine once one isn't this computer.
   /** @param {ThemeColors} t @param {boolean} collapsed @returns {import("gpui-kit").Element[]} */
   grouped(t, collapsed) {
-    const rows = this.ordered();
+    const ordered = this.ordered();
+    const parents = new Set(ordered.filter((r, i) => !r.tree && ordered[i + 1]?.tree).map(r => r.w.id));
+    let parent = "";
+    const rows = collapsed ? ordered : ordered.filter(r => {
+      if (!r.tree) { parent = r.w.id; return true; }
+      return !this.foldedSpaces.has(parent);
+    });
     /** @param {SpaceRow} r @returns {import("gpui-kit").Element} */
-    const draw = (r) => (collapsed ? this.compact(r, t) : this.row(r, t));
+    const draw = (r) => (collapsed ? this.compact(r, t) : this.row(r, t, parents.has(r.w.id)));
     // Where the active space's row lands among the children this returns: the list scrolls by its direct
     // children, and machine headers, login notes and loading rows count too.
     this.activeAt = -1;
@@ -615,8 +622,8 @@ export default class Spaces extends View {
       .when(g.behind > 0, (el) => el.child(div().flex_none().text_color(t.ansi1).child(`\u2193${g.behind}`)));
   }
 
-  /** @param {SpaceRow} row @param {ThemeColors} t */
-  row({ w, i, g, tree }, t) {
+  /** @param {SpaceRow} row @param {ThemeColors} t @param {boolean} [hasKids] */
+  row({ w, i, g, tree }, t, hasKids = false) {
     const on = w.active;
     const attention = this.attention.get(w.id);
     const fromIndex = this.pressed === null ? -1 : spaces().findIndex(s => s.id === this.pressed);
@@ -628,7 +635,7 @@ export default class Spaces extends View {
       .id(`space-${w.id}`)
       .px(8)
       .h(rowHeight({ tree }))
-      .mb(4)
+      .mb(tree ? 0 : 4)
       .flex_none()
       .justify_center()
 
@@ -671,6 +678,15 @@ export default class Spaces extends View {
           .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).flex_none().text_color(t.dim)))
           .when(!tree, el => el.child(h_flex().size(18).flex_none().bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color("#ffffff").child([...w.name][0]?.toUpperCase() ?? "?")))
           .child(div().flex_initial().min_w(SIDE_MIN).truncate().text_color(t.foreground).child(w.name))
+          .when(hasKids, el => el.child(div().id(`space-fold-${w.id}`).flex_none().cursor_pointer().text_color(t.dim)
+            .hover(s => s.text_color(t.foreground))
+            .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+            .on_mouse_up("left", (_e, cx) => {
+              cx.stop_propagation();
+              this.foldedSpaces.has(w.id) ? this.foldedSpaces.delete(w.id) : this.foldedSpaces.add(w.id);
+              cx.notify();
+            })
+            .child(svg(`mods/workspace-chrome/chevron-${this.foldedSpaces.has(w.id) ? "right" : "down"}.svg`).size(11).flex_none())))
           .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
           .when(attention?.blocked > 0, el => el.child(div().flex_none().text_size(10.5).text_color(t.blocked)
             .tooltip(`${attention.blocked} agents need you`).child(`!${attention.blocked}`)))
