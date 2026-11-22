@@ -477,6 +477,7 @@ export default class Spaces extends View {
       .id(`space-${w.id}`)
       .px(8)
       .h(rowHeight({ tree }))
+      .mb(4)
       .flex_none()
       .justify_center()
 
