@@ -60,7 +60,7 @@ export function agentLine(a, pane, task) {
   };
 }
 const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
-const ROW_HEIGHT = 46;
+const ROW_HEIGHT = 42;
 // A sub-agent without a pane isn't in agents(): its raw word, error counting as
 // blocked. It's never done: it reports to its parent, and the parent's done is the news.
 const kidStatus = (k, listed) => {
@@ -202,6 +202,7 @@ export default class Agents extends View {
       .px(5)
 
       .h(ROW_HEIGHT)
+      .mb(4)
       .flex_none()
       .gap(0)
       .items_center()
@@ -213,13 +214,13 @@ export default class Agents extends View {
         .when(Boolean(l), el => el.border_l(1.5).border_color(t.input))
         .when(l === "└" || l === "├", el => el.border_b(1.5))))
       .when(Boolean(pic), el => el.child(div().mr(5).child(pic)))
-      .child(v_flex().flex_1().min_w(0).gap(1)
-        .child(h_flex().h(14).min_w(0).items_center().gap(4)
+      .child(v_flex().flex_1().min_w(0).gap(0)
+        .child(h_flex().h(13).min_w(0).items_center().gap(4)
           .child(div().flex_1().min_w(0).truncate().text_color(on ? t.foreground : t.muted).child(pane?.cwd?.split("/").pop() || k.parent || "Sub-agent"))
           .child(this.status(t, { status: st }, compact)))
-        .child(h_flex().h(14).min_w(0).text_size(10.5).text_color(t.accent)
+        .child(h_flex().h(13).min_w(0).text_size(10.5).text_color(t.accent)
           .when(Boolean(pane?.branch), el => el.child(div().flex_1().min_w(0).truncate().child(pane.branch))))
-        .child(h_flex().h(14).min_w(0).gap(5).text_size(11).text_color(t.dim)
+        .child(h_flex().h(13).min_w(0).gap(5).text_size(11).text_color(t.dim)
           .child(div().flex_1().min_w(0).truncate().child(task))
           .child(div().flex_none().text_size(10).child(k.address))));
   }
@@ -350,6 +351,7 @@ export default class Agents extends View {
         .id(`ag-${a.address}`)
         .px(5)
         .h(ROW_HEIGHT)
+        .mb(4)
         .flex_none()
 
         .items_center()
@@ -369,15 +371,15 @@ export default class Agents extends View {
             this.folded.has(a.address) ? this.folded.delete(a.address) : this.folded.add(a.address);
             cx.notify();
           })).child(pic)))
-        .child(v_flex().flex_1().min_w(0).gap(1)
-          .child(h_flex().h(14).min_w(0).items_center().gap(4)
+        .child(v_flex().flex_1().min_w(0).gap(0)
+          .child(h_flex().h(13).min_w(0).items_center().gap(4)
             .child(div().flex_1().min_w(0).truncate().text_color(idle ? t.muted : t.foreground).child(line.place))
             .when(subs.length > 0, el => el.child(fold(a, subs)))
             .child(this.status(t, a, byPriority && !isPinned)))
-          .child(h_flex().h(14).min_w(0).gap(4).items_center().text_size(10.5)
+          .child(h_flex().h(13).min_w(0).gap(4).items_center().text_size(10.5)
             .when(Boolean(line.branch), el => el.child(div().flex_1().min_w(0).truncate().text_color(t.accent).child(line.branch)))
             .when(this.hovered !== a.address && Boolean(when), el => el.child(div().flex_none().text_color(t.dim).child(duration(now - when)))))
-          .child(h_flex().h(14).min_w(0).gap(4).items_center().text_size(11).text_color(t.dim)
+          .child(h_flex().h(13).min_w(0).gap(4).items_center().text_size(11).text_color(t.dim)
             .child(div().flex_1().min_w(0).truncate().child(line.task))
             .child(div().flex_none().text_size(10).child(line.id))
             .when(this.hovered === a.address, el => el.child(pin))
