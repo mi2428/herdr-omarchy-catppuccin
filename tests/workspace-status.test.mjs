@@ -47,6 +47,7 @@ assert.equal(quotaSnapshot(output, now).opencodego, undefined);
 output.providers[2].source = "api";
 assert.throws(() => quotaSnapshot({ ...output, generatedAt: new Date(now - 300000).toISOString() }, now), /Invalid usage snapshot/);
 assert.throws(() => quotaSnapshot({ ...output, schemaVersion: 2 }, now), /Invalid usage snapshot/);
+assert.throws(() => quotaSnapshot({ ...output, providers: [null] }, now), /Invalid usage snapshot/);
 output.providers[0].windows[0].remainingPercent = 102;
 assert.equal(quotaSnapshot(output, now).codex.session, undefined);
 output.providers[0].windows[0].remainingPercent = 0;
@@ -92,6 +93,7 @@ noUsage.init({ usageProviders: [] }, { timer: { every() { throw Error("Unexpecte
 assert.equal(calls, 3);
 assert.throws(() => new Status().init({ usageProviders: ["go", "go"] }, {}), /Invalid usageProviders/);
 assert.throws(() => new Status().init({ usageProviders: ["other"] }, {}), /Invalid usageProviders/);
+assert.throws(() => new Status().init({ usageProviders: "codex" }, {}), /Invalid usageProviders/);
 const layout = JSON.parse(readFileSync(new URL("../layouts/omarchy-catppuccin.json", import.meta.url), "utf8"));
 const status = (function find(node) { return node.id === "status" ? node : node.children?.map(find).find(Boolean); })(layout);
 assert.deepEqual(status.content.props.usageProviders, ["codex"]);
