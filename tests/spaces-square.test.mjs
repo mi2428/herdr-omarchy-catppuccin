@@ -29,7 +29,7 @@ const element = () => {
     if (key in target) return target[key];
     if (key === "child") return value => { target.children.push(value); return el; };
     if (key === "when") return (yes, fn) => { if (yes) fn(el); return el; };
-    if (key === "id" || key === "h" || key === "mb" || key === "on_mouse_up") return (...args) => { target[key] = args; return el; };
+    if (key === "id" || key === "h" || key === "mb" || key === "right" || key === "pr" || key === "on_mouse_up") return (...args) => { target[key] = args; return el; };
     return key in target ? target[key] : () => el;
   } });
   return el;
@@ -57,6 +57,9 @@ view.pressed = null;
 const find = (node, id) => node?.id?.[0] === id ? node : node?.children?.map(child => find(child, id)).find(Boolean);
 let visible = view.grouped({ foreground: "white", dim: "gray", chrome: "black", selected: "blue", hover: "navy", ansi6: "teal" }, false);
 assert.deepEqual(Array.from(visible, row => row.id[0]), ["space-main", "space-child"]);
+assert.equal(visible[0].children[0].children.at(-1).id[0], "space-fold-main");
+assert.deepEqual(visible[0].children[0].children.at(-1).right, [8]);
+assert.deepEqual(visible[0].pr, [26]);
 assert.deepEqual(find(visible[1], "space-child").h, [22]);
 assert.deepEqual(find(visible[1], "space-child").mb, [0]);
 const fold = find(visible[0], "space-fold-main");

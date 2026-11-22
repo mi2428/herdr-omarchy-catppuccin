@@ -634,6 +634,7 @@ export default class Spaces extends View {
       .relative()
       .id(`space-${w.id}`)
       .px(8)
+      .when(hasKids, el => el.pr(26))
       .h(rowHeight({ tree }))
       .mb(tree ? 0 : 4)
       .flex_none()
@@ -678,7 +679,12 @@ export default class Spaces extends View {
           .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).flex_none().text_color(t.dim)))
           .when(!tree, el => el.child(h_flex().size(18).flex_none().bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color("#ffffff").child([...w.name][0]?.toUpperCase() ?? "?")))
           .child(div().flex_initial().min_w(SIDE_MIN).truncate().text_color(t.foreground).child(w.name))
-          .when(hasKids, el => el.child(div().id(`space-fold-${w.id}`).flex_none().cursor_pointer().text_color(t.dim)
+          .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
+          .when(attention?.blocked > 0, el => el.child(div().flex_none().text_size(10.5).text_color(t.blocked)
+            .tooltip(`${attention.blocked} agents need you`).child(`!${attention.blocked}`)))
+          .when(attention?.review > 0, el => el.child(div().flex_none().text_size(10.5).text_color(t.accent)
+            .tooltip(`${attention.review} reviews pending`).child(`R${attention.review}`)))
+          .when(hasKids, el => el.child(div().id(`space-fold-${w.id}`).absolute().right(8).top(0).bottom(0).flex().items_center().cursor_pointer().text_color(t.dim)
             .hover(s => s.text_color(t.foreground))
             .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
             .on_mouse_up("left", (_e, cx) => {
@@ -686,12 +692,7 @@ export default class Spaces extends View {
               this.foldedSpaces.has(w.id) ? this.foldedSpaces.delete(w.id) : this.foldedSpaces.add(w.id);
               cx.notify();
             })
-            .child(svg(`mods/workspace-chrome/chevron-${this.foldedSpaces.has(w.id) ? "right" : "down"}.svg`).size(11).flex_none())))
-          .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1())
-          .when(attention?.blocked > 0, el => el.child(div().flex_none().text_size(10.5).text_color(t.blocked)
-            .tooltip(`${attention.blocked} agents need you`).child(`!${attention.blocked}`)))
-          .when(attention?.review > 0, el => el.child(div().flex_none().text_size(10.5).text_color(t.accent)
-            .tooltip(`${attention.review} reviews pending`).child(`R${attention.review}`))),
+            .child(svg(`mods/workspace-chrome/chevron-${this.foldedSpaces.has(w.id) ? "right" : "down"}.svg`).size(11).flex_none()))),
       );
   }
 
