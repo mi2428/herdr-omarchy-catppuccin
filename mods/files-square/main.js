@@ -285,7 +285,7 @@ export default class Files extends View {
       const count = (entry.dir ? this.counts.folders : this.counts.files)[absolute];
       const mark = entry.dir ? (!open && (count || this.marks[absolute]) ? "M" : null) : this.marks[absolute];
       const [glyph, color] = entry.dir ? [open ? "" : "", "ansi4"] : fileIcon(entry.name);
-      out.push(h_flex().id(`file-${path}`).h(22).flex_none().pl(8 + depth * 18).pr(8).gap(7).items_center().cursor_pointer().hover(s => s.bg(themeColor(t, "hover")))
+      out.push(h_flex().id(`file-${path}`).h(20).flex_none().pl(8 + depth * 18).pr(8).gap(7).items_center().cursor_pointer().hover(s => s.bg(themeColor(t, "hover")))
         .on_click((_e, cx) => entry.dir ? this.toggle(path, cx) : this.show(path, cx))
         .child(entry.dir ? svg(`mods/files/chevron-${open ? "down" : "right"}.svg`).size(12).flex_none().text_color(themeColor(t, "dim")) : div().w(12).flex_none())
         .child(div().w(14).flex_none().text_size(15).text_color(themeColor(t, color)).child(glyph))
