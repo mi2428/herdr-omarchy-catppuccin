@@ -2,39 +2,29 @@
 set -euo pipefail
 root=$(mktemp -d)
 trap 'rm -rf "$root"' EXIT
-mkdir "$root/bin" "$root/repo"
-export DELTA_REAL=$(command -v delta)
-cat > "$root/bin/delta" <<'SH'
-#!/bin/sh
-printf '%s\n' "$*" >> "$DELTA_ARGS_LOG"
-exec "$DELTA_REAL" "$@"
-SH
-chmod +x "$root/bin/delta"
-cd "$root/repo"
+cd "$root"
 git init -q
 git -c user.name=Test -c user.email=test@example.invalid commit -qm initial --allow-empty
 printf 'old\n' > tracked.txt
 git add tracked.txt
 git -c user.name=Test -c user.email=test@example.invalid commit -qm tracked
 printf 'new\n' > tracked.txt
-printf 'addition\n' > added.txt
+printf 'staged\n' > staged.txt
+git add staged.txt
+printf 'addition\n' > 'new file.txt'
 script=$(dirname "$(dirname "$(realpath "$0")")")/mods/tabs-files/changes-diff.sh
-for width in 100 180; do
-  export DELTA_ARGS_LOG="$root/$width.args"
-  PATH="$root/bin:$PATH" FZF_PREVIEW_COLUMNS="$width" bash "$script" --preview > "$root/$width.out"
-done
-python3 - "$root" <<'PY'
+bash "$script" --preview > "$root/preview"
+python3 - "$root/preview" <<'PY'
 from pathlib import Path
 import re
 import sys
 
-root = Path(sys.argv[1])
-for width in (100, 180):
-    output = re.sub(r"\x1b\[[0-9;]*m", "", (root / f"{width}.out").read_text())
-    assert "M tracked.txt" in output
-    assert re.search(r"A .*added.txt", output)
-    args = (root / f"{width}.args").read_text()
-    assert f"--width={width}" in args
-    assert ("--side-by-side" in args) == (width >= 140)
-print("Changes preview: M/A and adaptive width OK")
+output = re.sub(r"\x1b\[[0-9;]*m", "", Path(sys.argv[1]).read_text())
+for text in (" M tracked.txt", "A  staged.txt", "?? \"new file.txt\"", "+new", "+staged", "+addition"):
+    assert text in output, text
+print("Changes preview: tracked, staged, and untracked files OK")
 PY
+if (cd "$root/.." && bash "$script" --preview >/dev/null 2>&1); then
+  echo 'Changes preview unexpectedly succeeded outside Git' >&2
+  exit 1
+fi

@@ -2,20 +2,17 @@
 set -euo pipefail
 
 if [[ ${1:-} != --preview ]]; then
-  printf '\n' | fzf --disabled --no-input --no-info --no-sort --no-separator --pointer=' ' \
+  printf '\n' | fzf --ansi --disabled --no-input --no-info --no-sort --no-separator --pointer=' ' \
     --preview-window=up,99%,border-none,nowrap \
     --preview='bash "$HOME/.config/herdr-app/mods/tabs-files/changes-diff.sh" --preview' \
     --bind='q:abort,resize:refresh-preview' >/dev/null || [[ $? -eq 1 ]]
   exit
 fi
 
-width=${FZF_PREVIEW_COLUMNS:?}
-[[ $width =~ ^[1-9][0-9]*$ ]] || exit 2
 git rev-parse --is-inside-work-tree >/dev/null
-layout=()
-if ((width < 140)); then layout=(--unified); fi
-git-delta-input --range HEAD --include-staged -- |
-  python3 "$HOME/.config/fish/lib/dotfiles_git_delta_sections.py" "${layout[@]}" \
-    delta --paging=never --features=catppuccin-mocha --dark --true-color=always \
-    --line-numbers --width="$width" \
-    --file-added-label=A --file-modified-label=M --file-removed-label=D --file-renamed-label=R
+git status --short --untracked-files=all
+git -c color.ui=always diff --no-ext-diff HEAD --
+git ls-files --others --exclude-standard -z |
+  while IFS= read -r -d '' file; do
+    git -c color.ui=always diff --no-index -- /dev/null "$file" || [[ $? -eq 1 ]]
+  done
