@@ -1,6 +1,6 @@
 # Herdr Omarchy Catppuccin
 
-A Catppuccin Mocha layout for Herdr app with square panes, transparent gaps, and bundled mods.
+A Catppuccin Mocha layout for Herdr app designed to fit Omarchy's Hyprland desktop, with square panes, transparent gaps, and bundled mods.
 
 ## Getting Started
 
