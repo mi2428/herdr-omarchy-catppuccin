@@ -72,7 +72,10 @@ export default class WorkspaceStatus extends View {
         .child(div().when(Boolean(entry), el => el.w(28).text_right()).text_color(entry ? t.muted : t.dim)
           .child(entry ? `${Math.round(remaining)}%` : "—"));
     };
-    return h_flex().gap(6).items_center().child(div().child(name))
+    return h_flex().gap(6).items_center()
+      .child(svg(`icons/${id === "codex" ? "agent" : id === "opencodego" ? "opencode" : id}.svg`)
+        .size(13).flex_none().text_color(t.muted))
+      .child(name)
       .child(segment("session", "5h")).child(segment("weekly", "7d"))
       .when(Boolean(lane.monthly), el => el.child(segment("monthly", "mo")));
   }
@@ -104,6 +107,7 @@ export default class WorkspaceStatus extends View {
       .when(this.usageProviders.includes("claude"), el => el.child(this.meter("claude", "Claude", t)))
       .when(this.usageProviders.includes("go"), el => el.child(this.meter("opencodego", "Go", t)))
       .when(this.usageProviders.includes("zen"), el => el.child(h_flex().gap(4).items_center().tooltip("OpenCode Zen prepaid balance (not a quota)")
+        .child(svg("icons/opencode.svg").size(13).flex_none().text_color(t.muted))
         .child("Zen").child(div().text_color(this.usage.zen === undefined ? t.dim : t.muted)
           .child(this.usage.zen === undefined ? "—" : `$${this.usage.zen.toFixed(2)}`))))
       .child(div().id("palette").text_color(t.dim).on_click(() => run("app.palette")).child(this.hint(t)));

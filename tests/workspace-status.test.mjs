@@ -6,6 +6,7 @@ const source = readFileSync(new URL("../mods/workspace-status-square/main.js", i
   .replace(/^import .*$/gm, "").replace("export default class WorkspaceStatus", "class WorkspaceStatus");
 const now = Date.parse("2026-11-22T04:00:00Z"), iso = new Date(now).toISOString();
 let output, calls = 0, pending;
+const icons = [];
 const node = () => {
   const el = new Proxy({}, { get: (_, key) => key === "when" ? (yes, fn) => { if (yes) fn(el); return el; } : () => el });
   return el;
@@ -14,7 +15,7 @@ const { quotaSnapshot, Status } = runInNewContext(`${source}\n({ quotaSnapshot, 
   View: class {}, Date, Number, Array, Error, JSON,
   checking: () => false,
   props: () => ({}),
-  h_flex: node, div: node, svg: node, spaces: () => [], agents: () => [], theme: () => ({}), keys: () => [], window: () => ({}),
+  h_flex: node, div: node, svg: path => { icons.push(path); return node(); }, spaces: () => [], agents: () => [], theme: () => ({}), keys: () => [], window: () => ({}),
   exec: async (command, args, options) => {
     assert.equal(command, "codexbar");
     assert.deepEqual(Array.from(args), ["dashboard", "--no-cost", "--identity", "redacted", "--timeout", "12"]);
@@ -80,6 +81,10 @@ selected.meter = (_id, name) => { chosen.push(name); return name; };
 selected.hint = () => "commands";
 selected.render();
 assert.deepEqual(chosen, ["Claude", "Go"]);
+for (const [id, name] of [["codex", "Codex"], ["claude", "Claude"], ["opencodego", "Go"]])
+  Status.prototype.meter.call(view, id, name, {});
+assert.deepEqual(icons.filter(path => path.startsWith("icons/")),
+  ["icons/opencode.svg", "icons/agent.svg", "icons/claude.svg", "icons/opencode.svg"]);
 assert.equal(calls, 3);
 
 const noUsage = new Status();
