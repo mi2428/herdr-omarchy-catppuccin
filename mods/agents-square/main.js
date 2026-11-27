@@ -6,7 +6,7 @@ import { agents, terminals, panes, focused, spaces, run, theme, shared, setShare
 
 /** @typedef {{id?: string, children?: unknown[], size?: {px?: number} | null}} LayoutNode */
 /** @typedef {import("herdr").AgentInfo} Agent */
-/** @typedef {{address: string, state: string, parent?: string | null, cwd?: string | null, labels?: Record<string, unknown> | null, program?: Pick<import("herdr").Program, "name" | "icon" | "tint"> | null, status?: import("herdr").Status | "error" | null, name?: string, template?: string, title?: string}} Terminal */
+/** @typedef {{address: string, state: string, parent?: string | null, cwd?: string | null, labels?: Record<string, unknown> | null, program?: Pick<import("herdr").Program, "name" | "icon" | "tint"> | null, status?: import("herdr").Status | "error" | null, name?: string | null, template?: string | null, title?: string}} Terminal */
 /** @typedef {{program?: import("herdr").Program | null, title?: string, terminal?: string | null, address?: string, app?: string | null, key?: string}} TitleSource */
 /** @typedef {{t: Terminal, depth: number, branch: string | null}} TreeRow */
 /** @param {unknown} value @returns {value is Terminal} */
@@ -16,8 +16,8 @@ function isTerminal(value) {
     && (value.cwd === undefined || value.cwd === null || typeof value.cwd === "string")
     && (value.labels === undefined || value.labels === null || isRecord(value.labels))
     && (value.status === undefined || value.status === null || value.status === "error" || value.status === "working" || value.status === "blocked" || value.status === "done" || value.status === "idle")
-    && (value.name === undefined || typeof value.name === "string")
-    && (value.template === undefined || typeof value.template === "string")
+    && (value.name === undefined || value.name === null || typeof value.name === "string")
+    && (value.template === undefined || value.template === null || typeof value.template === "string")
     && (value.title === undefined || typeof value.title === "string")
     && (value.program === undefined || value.program === null || (isRecord(value.program)
       && typeof value.program.name === "string"
